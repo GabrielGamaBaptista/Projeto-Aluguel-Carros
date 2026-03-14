@@ -1,0 +1,292 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Helper: dados do carro (usado nas regras de tasks) ───────────────
+    function carData(carId) {
+      return get(/databases/$(database)/documents/cars/$(carId)).data;
+    }
+
+    // ─── users ────────────────────────────────────────────────────────────
+    // Leitura: qualquer autenticado (necessario para busca de locatarios,
+    //          detalhes de tenant, notificacoes, etc.)
+    // Nota conhecida: PII (CPF, CNH) exposta a usuarios autenticados.
+    //   Mitigacao futura: mover dados sensiveis para sub-colecao com acesso restrito.
+    //
+    // Escrita: apenas o proprio usuario, com protecao de campos criticos:
+    //   - 'role' nao pode ser alterado (previne escalada de privilegio)
+    //   - 'email', 'authProvider', 'createdAt' tambem sao imutaveis
+    match /users/{userId} {
+      allow read: if request.auth != null;
+
+      allow create: if request.auth != null
+        && request.auth.uid == userId;
+
+      allow update: if request.auth != null
+        && request.auth.uid == userId
+        && !request.resource.data.diff(resource.data)
+              .affectedKeys()
+              .hasAny(['role', 'email', 'authProvider', 'createdAt']);
+
+      allow delete: if false;
+    }
+
+    // ─── cars ─────────────────────────────────────────────────────────────
+    // Leitura: apenas o locador dono ou o locatario atribuido ao carro.
+    //
+    // Criacao: apenas o locador — que se define como landlordId do documento.
+    //
+    // Atualizacao (3 casos):
+    //   1. Locador: pode atualizar qualquer campo, mas nao pode mudar landlordId.
+    //   2. Locatario atribuido: pode atualizar apenas campos de km/foto/oleo.
+    //   3. Locatario sem carro: pode se auto-atribuir a carro disponivel
+    //      (flow de aceite de solicitacao via tenantRequestService.acceptRequest).
+    //
+    // Delecao: apenas o locador dono.
+    match /cars/{carId} {
+      allow read: if request.auth != null
+        && (resource.data.landlordId == request.auth.uid
+            || resource.data.tenantId == request.auth.uid);
+
+      allow create: if request.auth != null
+        && request.resource.data.landlordId == request.auth.uid;
+
+      allow update: if request.auth != null && (
+
+        // Caso 1: locador atualiza seu proprio carro (landlordId imutavel)
+        (resource.data.landlordId == request.auth.uid
+          && request.resource.data.landlordId == resource.data.landlordId)
+
+        ||
+
+        // Caso 2: locatario atribuido atualiza campos de KM / foto / oleo
+        (resource.data.tenantId == request.auth.uid
+          && request.resource.data.diff(resource.data)
+                .affectedKeys()
+                .hasOnly(['totalKm', 'lastKmUpdate', 'lastPhotoInspection',
+                          'lastInspectionPhotos', 'lastOilChangeKm', 'updatedAt']))
+
+        ||
+
+        // Caso 3: locatario auto-atribui a carro disponivel (aceitar solicitacao)
+        // Permite setar tenantId/status/rentedAt em carro sem locatario.
+        // Restricao: status resultante DEVE ser 'rented' (evita que tenant defina valores arbitrarios).
+        // Limitacao conhecida: nao verifica existencia de tenantRequest aceito (IDs sao auto-gerados).
+        //   Recomendacao futura: mover carsService.assignTenant() para Cloud Function.
+        (resource.data.tenantId == null
+          && resource.data.status == 'available'
+          && request.resource.data.diff(resource.data)
+                .affectedKeys()
+                .hasOnly(['tenantId', 'status', 'rentedAt'])
+          && request.resource.data.tenantId == request.auth.uid
+          && request.resource.data.status == 'rented')
+      );
+
+      allow delete: if request.auth != null
+        && resource.data.landlordId == request.auth.uid;
+    }
+
+    // ─── tasks ────────────────────────────────────────────────────────────
+    // Leitura: locatario da tarefa, ou locador/locatario do carro relacionado.
+    //   Usa carData() para verificar ownership via car document.
+    //
+    // Criacao: apenas locador ou locatario do carro em questao.
+    //
+    // Atualizacao: locatario (conclusao) ou locador (aprovacao/revisao).
+    //
+    // Delecao: apenas locador do carro (ex: ao remover locatario).
+    //
+    // Nota de performance: carData() executa 1 leitura extra por documento.
+    //   Para queries filtradas por carId, todas retornam o mesmo carro — custo aceitavel.
+    match /tasks/{taskId} {
+      allow read: if request.auth != null && (
+        resource.data.tenantId == request.auth.uid
+        || carData(resource.data.carId).landlordId == request.auth.uid
+        || carData(resource.data.carId).tenantId == request.auth.uid
+      );
+
+      allow create: if request.auth != null && (
+        carData(request.resource.data.carId).landlordId == request.auth.uid
+        || carData(request.resource.data.carId).tenantId == request.auth.uid
+      );
+
+      allow update: if request.auth != null && (
+
+        // Locatario: pode concluir tarefas (status, dados de conclusao), mas nao pode
+        // tocar em campos de aprovacao (approved, revisionRequested, etc.) nem em
+        // campos estruturais imutaveis (carId, type, createdAt, tenantId, dueDate).
+        // Verifica via tenantId do documento OU via carro (tarefas sem tenantId definido,
+        // ex: createMaintenanceRequest nao salva tenantId no documento).
+        // Bloqueio pos-aprovacao: locatario nao pode editar tarefa ja aprovada.
+        // Nota: usa `!= true` (nao `== false`) pois tasks novas tem approved=undefined.
+        ((resource.data.tenantId == request.auth.uid
+            || carData(resource.data.carId).tenantId == request.auth.uid)
+          && resource.data.get('approved', false) != true
+          && !request.resource.data.diff(resource.data)
+                .affectedKeys()
+                .hasAny(['approved', 'approvedAt', 'revisionRequested', 'revisionReason',
+                         'revisionRequestedAt', 'carId', 'type', 'createdAt',
+                         'manualRequest', 'tenantId', 'title', 'description', 'dueDate']))
+
+        ||
+
+        // Locador: pode aprovar e solicitar revisao (hasOnly — whitelist).
+        // Garante que nao pode alterar dados de conclusao do locatario (KM, fotos, etc.)
+        // nem campos estruturais da tarefa.
+        (carData(resource.data.carId).landlordId == request.auth.uid
+          && request.resource.data.diff(resource.data)
+                .affectedKeys()
+                .hasOnly(['status', 'approved', 'approvedAt', 'revisionRequested',
+                          'revisionReason', 'revisionRequestedAt', 'completedAt']))
+      );
+
+      allow delete: if request.auth != null
+        && carData(resource.data.carId).landlordId == request.auth.uid;
+    }
+
+    // ─── tenantRequests ───────────────────────────────────────────────────
+    // Leitura: apenas o locador que enviou ou o locatario que recebeu.
+    //
+    // Criacao: apenas o locador (que se define como remetente landlordId).
+    //
+    // Atualizacao: locador (cancelar) ou locatario (aceitar / recusar).
+    //   Validacao de status e feita no servico (tenantRequestService).
+    //
+    // Delecao: bloqueada (registros historicos).
+    match /tenantRequests/{requestId} {
+      allow read: if request.auth != null && (
+        resource.data.landlordId == request.auth.uid
+        || resource.data.tenantId == request.auth.uid
+      );
+
+      allow create: if request.auth != null
+        && request.resource.data.landlordId == request.auth.uid;
+
+      // Apenas campos 'status' e 'respondedAt' podem ser alterados (hasOnly — whitelist).
+      // Impede alteracao de landlordId, tenantId, carId, etc.
+      // Apenas requests 'pending' podem ser atualizados (maquina de estados).
+      // Status resultante deve ser um dos valores validos.
+      // respondedAt deve ser timestamp do servidor (evita manipulacao de datas).
+      allow update: if request.auth != null
+        && resource.data.status == 'pending'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'respondedAt'])
+        && request.resource.data.status in ['accepted', 'rejected', 'cancelled']
+        && request.resource.data.respondedAt == request.time
+        && (
+          resource.data.landlordId == request.auth.uid
+          || resource.data.tenantId == request.auth.uid
+          // Locatario recentemente atribuido ao carro pode cancelar outros requests pendentes do mesmo carro
+          || get(/databases/$(database)/documents/cars/$(resource.data.carId)).data.tenantId == request.auth.uid
+        );
+
+      allow delete: if false;
+    }
+
+    // ─── mural_posts ──────────────────────────────────────────────────────
+    // Colecao real usada pelo muralService. O bloco /mural foi removido (dead code).
+    //
+    // Leitura: locador ve seus proprios posts; locatario ve posts publicos ('all')
+    //   ou posts direcionados a ele especificamente.
+    //   Posts 'specific' para outro locatario sao bloqueados.
+    //
+    // Criacao: apenas locadores verificados via role no documento users/.
+    //   Custo: 1 leitura extra por criacao de post — aceitavel.
+    //
+    // Atualizacao e delecao: apenas o locador autor do post.
+    match /mural_posts/{postId} {
+      allow read: if request.auth != null && (
+        resource.data.landlordId == request.auth.uid
+        || resource.data.targetType == 'all'
+        || resource.data.targetTenantId == request.auth.uid
+      );
+
+      allow create: if request.auth != null
+        && request.resource.data.landlordId == request.auth.uid
+        && request.resource.data.targetType in ['all', 'specific']
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'locador';
+
+      allow update: if request.auth != null
+        && resource.data.landlordId == request.auth.uid
+        && request.resource.data.landlordId == resource.data.landlordId;
+
+      allow delete: if request.auth != null
+        && resource.data.landlordId == request.auth.uid;
+    }
+
+    // ─── notifications ────────────────────────────────────────────────────
+    // Leitura: apenas o destinatario da notificacao.
+    //
+    // Criacao: qualquer autenticado, mas com validacao estrutural:
+    //   - campos obrigatorios presentes
+    //   - read/sent devem ser false na criacao (garante integridade do fluxo de push)
+    //   - userId nao pode ser o proprio criador (notificacoes sao sempre para outros)
+    //   TODO: migrar criacao inteiramente para Cloud Functions e setar allow create: if false.
+    //
+    // Atualizacao: apenas o destinatario (ex: marcar como lida).
+    //   Apenas o campo 'read' pode ser alterado — protege os demais campos.
+    //
+    // Delecao: bloqueada.
+    match /notifications/{notifId} {
+      allow read: if request.auth != null
+        && request.auth.uid == resource.data.userId;
+
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['userId', 'title', 'body', 'data', 'read', 'sent', 'createdAt'])
+        && request.resource.data.userId is string
+        && request.resource.data.read == false
+        && request.resource.data.sent == false
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.userId != request.auth.uid;
+
+      allow update: if request.auth != null
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
+        && request.resource.data.read is bool;
+
+      allow delete: if false;
+    }
+
+    // ─── Colecoes do sistema de pagamentos ────────────────────────────────
+
+    // Contas Asaas dos locadores: nenhum acesso client-side.
+    // Leitura e escrita apenas via Cloud Functions (Admin SDK).
+    match /asaasAccounts/{docId} {
+      allow read, write: if false;
+    }
+
+    // Mapeamento locatario → customer Asaas: leitura restrita ao proprio usuario.
+    // Escrita apenas via Cloud Functions.
+    match /asaasCustomers/{docId} {
+      allow read: if request.auth != null && request.auth.uid == docId;
+      allow write: if false;
+    }
+
+    // Contratos de aluguel: leitura restrita ao locador e locatario do contrato.
+    // Criacao: bloqueada no client — exclusivamente via Cloud Function (Admin SDK).
+    // Atualizacao: apenas o locador dono.
+    // Delecao: bloqueada (historico financeiro).
+    match /rentalContracts/{contractId} {
+      allow read: if request.auth != null
+        && (resource.data.landlordId == request.auth.uid
+            || resource.data.tenantId == request.auth.uid);
+
+      allow create: if false;
+
+      // Toda escrita vai via Cloud Functions (Admin SDK — bypassa rules).
+      // Client-side so faz leitura.
+      allow update: if false;
+
+      allow delete: if false;
+    }
+
+    // Cobranças: apenas landlord ou tenant da cobranca podem ler.
+    // Escrita exclusivamente via Cloud Functions (Admin SDK).
+    match /charges/{chargeId} {
+      allow read: if request.auth != null
+        && (request.auth.uid == resource.data.landlordId
+            || request.auth.uid == resource.data.tenantId);
+
+      allow write: if false;
+    }
+  }
+}

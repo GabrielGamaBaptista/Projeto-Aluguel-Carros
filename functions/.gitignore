@@ -1,0 +1,7 @@
+node_modules/
+*.local
+.env
+test-sandbox.js
+check-charge.js
+simulate-payment.js
+check-split.js
