@@ -4,11 +4,11 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 60
     environment:
+      groups:
+        - ios
       node: 20
       xcode: latest
       cocoapods: default
-      vars:
-        GOOGLE_SERVICE_INFO_PLIST_BASE64: $GOOGLE_SERVICE_INFO_PLIST_BASE64
     scripts:
       - name: Decode GoogleService-Info.plist
         script: |
