@@ -1,7 +1,7 @@
 # Firebase — contém Project ID, API keys e OAuth Client IDs
 # Nunca commitar. Obter no Firebase Console e colocar localmente.
 android/app/google-services.json
-ios/GoogleService-Info.plist
+ios/AluguelCarrosApp/GoogleService-Info.plist
 
 # Android signing — manter credenciais em ~/.gradle/gradle.properties (fora do repo)
 android/keystore.properties

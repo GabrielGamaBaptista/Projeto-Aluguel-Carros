@@ -34,8 +34,30 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string></string>
+	<!-- Permissao de camera (PhotoPicker) -->
+	<key>NSCameraUsageDescription</key>
+	<string>O app precisa acessar a camera para fotografar veiculos, documentos e comprovantes.</string>
+	<!-- Permissao de galeria de fotos -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>O app precisa acessar suas fotos para selecionar imagens de veiculos e documentos.</string>
+	<!-- Permissao para salvar fotos na galeria -->
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>O app precisa de permissao para salvar fotos tiradas pela camera.</string>
+	<!-- Background mode para push notifications -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
+	<!-- URL scheme para Google Sign-In (REVERSED_CLIENT_ID do GoogleService-Info.plist) -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.254869962668-q9jsjabi1l10vefs8rn4fl8h4vrsan8b</string>
+			</array>
+		</dict>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>

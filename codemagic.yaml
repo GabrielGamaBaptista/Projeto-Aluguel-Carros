@@ -1,0 +1,56 @@
+workflows:
+  ios-unsigned:
+    name: iOS Unsigned Build (SideStore)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      node: 20
+      xcode: latest
+      cocoapods: default
+      vars:
+        GOOGLE_SERVICE_INFO_PLIST_BASE64: $GOOGLE_SERVICE_INFO_PLIST_BASE64
+    scripts:
+      - name: Decode GoogleService-Info.plist
+        script: |
+          echo "$GOOGLE_SERVICE_INFO_PLIST_BASE64" | base64 --decode \
+            > ios/AluguelCarrosApp/GoogleService-Info.plist
+
+      - name: Install Node dependencies
+        script: |
+          npm install
+
+      - name: Install CocoaPods dependencies
+        script: |
+          cd ios && pod install
+
+      - name: Build unsigned iOS app
+        script: |
+          xcodebuild \
+            -workspace ios/AluguelCarrosApp.xcworkspace \
+            -scheme AluguelCarrosApp \
+            -sdk iphoneos \
+            -configuration Release \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            DEVELOPMENT_TEAM="" \
+            -quiet
+
+      - name: Package IPA
+        script: |
+          APP_PATH="build/Build/Products/Release-iphoneos/AluguelCarrosApp.app"
+          mkdir -p Payload
+          cp -r "$APP_PATH" Payload/
+          zip -r AluguelCarrosApp-unsigned.ipa Payload
+          rm -rf Payload
+
+    artifacts:
+      - AluguelCarrosApp-unsigned.ipa
+
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: master
+          include: true
