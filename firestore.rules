@@ -263,8 +263,8 @@ service cloud.firestore {
 
     // Contratos de aluguel: leitura restrita ao locador e locatario do contrato.
     // Criacao: bloqueada no client — exclusivamente via Cloud Function (Admin SDK).
-    // Atualizacao: apenas o locador dono.
-    // Delecao: bloqueada (historico financeiro).
+    // Atualizacao: exclusivamente via Cloud Functions (Admin SDK).
+    // Delecao: permitida apenas pelo locador dono, somente em contratos inativos.
     match /rentalContracts/{contractId} {
       allow read: if request.auth != null
         && (resource.data.landlordId == request.auth.uid
@@ -276,7 +276,11 @@ service cloud.firestore {
       // Client-side so faz leitura.
       allow update: if false;
 
-      allow delete: if false;
+      // Permite excluir apenas contratos inativos (active == false), somente pelo landlord.
+      // Contratos ativos precisam ser cancelados via Cloud Function antes de poder excluir.
+      allow delete: if request.auth != null
+        && resource.data.landlordId == request.auth.uid
+        && resource.data.active == false;
     }
 
     // Cobranças: apenas landlord ou tenant da cobranca podem ler.

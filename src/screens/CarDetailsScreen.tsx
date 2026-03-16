@@ -375,7 +375,7 @@ const CarDetailsScreen = ({ route, navigation }) => {
                 tenantId: car.tenantId,
                 landlordId: car.landlordId,
               })}>
-              <Text style={styles.actionButtonText}>Lancar Despesa</Text>
+              <Text style={styles.actionButtonText}>Despesas</Text>
             </TouchableOpacity>
           </View>
         )}

@@ -1,7 +1,7 @@
 export const EXPENSE_CATEGORIES = {
-  documentacao: { label: 'Documentacao', color: '#3B82F6', icon: '📄' },
-  manutencao: { label: 'Manutencao', color: '#F59E0B', icon: '🔧' },
-  seguro: { label: 'Seguro', color: '#8B5CF6', icon: '🛡️' },
+  documentacao: { label: 'Documentacao', color: '#3B82F6', icon: 'FileText' },
+  manutencao: { label: 'Manutencao', color: '#F59E0B', icon: 'Wrench' },
+  seguro: { label: 'Seguro', color: '#8B5CF6', icon: 'Shield' },
 } as const;
 
 export type ExpenseCategory = keyof typeof EXPENSE_CATEGORIES;

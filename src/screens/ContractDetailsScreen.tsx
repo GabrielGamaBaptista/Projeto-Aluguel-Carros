@@ -135,6 +135,37 @@ export default function ContractDetailsScreen({ route, navigation }: any) {
     }
   }, [newAmount, contract.rentAmount, contractId, pendingCharge]);
 
+  const handleDeleteContract = useCallback(() => {
+    Alert.alert(
+      'Excluir Contrato',
+      'Tem certeza que deseja excluir este contrato inativo? Esta acao nao pode ser desfeita.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Excluir',
+          style: 'destructive',
+          onPress: async () => {
+            setLoading(true);
+            let deleted = false;
+            try {
+              const result = await paymentService.deleteContract(contractId);
+              if (!result?.success) {
+                Alert.alert('Erro', result?.error || 'Nao foi possivel excluir o contrato.');
+                return;
+              }
+              deleted = true;
+            } catch (err: any) {
+              Alert.alert('Erro', err?.message || 'Nao foi possivel excluir.');
+            } finally {
+              setLoading(false);
+            }
+            if (deleted) navigation.goBack();
+          },
+        },
+      ]
+    );
+  }, [contractId, navigation]);
+
   const handleSaveChargeEdit = useCallback(async () => {
     // Fix 5: guardar contra pendingCharge ter ficado null entre o render e a acao
     if (!pendingCharge) {
@@ -298,6 +329,19 @@ export default function ContractDetailsScreen({ route, navigation }: any) {
         <Text style={styles.btnChargesText}>Ver Cobranças deste Contrato →</Text>
       </TouchableOpacity>
 
+      {/* Excluir contrato inativo */}
+      {!contract.active && (
+        <TouchableOpacity
+          style={styles.btnDelete}
+          onPress={handleDeleteContract}
+          disabled={loading}
+        >
+          {loading
+            ? <ActivityIndicator size="small" color="#DC2626" />
+            : <Text style={styles.btnDeleteText}>Excluir Contrato</Text>}
+        </TouchableOpacity>
+      )}
+
     </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -348,4 +392,9 @@ const styles = StyleSheet.create({
     alignItems: 'center', marginBottom: 8,
   },
   btnChargesText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  btnDelete: {
+    borderWidth: 1, borderColor: '#DC2626', borderRadius: 12, padding: 14,
+    alignItems: 'center', marginBottom: 8,
+  },
+  btnDeleteText: { color: '#DC2626', fontWeight: '600', fontSize: 14 },
 });

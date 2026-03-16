@@ -199,6 +199,22 @@ const paymentService = {
     }
   },
 
+  /**
+   * Deletes an inactive rental contract document from Firestore.
+   * Should only be called for contracts with active === false.
+   * @param {string} contractId
+   * @returns {Promise<{success: boolean}>}
+   */
+  deleteContract: async (contractId) => {
+    try {
+      await firestore().collection('rentalContracts').doc(contractId).delete();
+      return { success: true };
+    } catch (error) {
+      console.error('Error deleting contract:', error);
+      return { success: false, error: error.message };
+    }
+  },
+
   getPendingChargeByContract: async (contractId) => {
     try {
       const uid = auth().currentUser?.uid;

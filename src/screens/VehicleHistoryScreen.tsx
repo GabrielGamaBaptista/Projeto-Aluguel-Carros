@@ -39,6 +39,15 @@ const formatDate = (timestamp: any): string => {
 
 const oilKmValue = (task: any): number => task.oilChangeKm ?? task.currentKm ?? 0;
 
+const fmtShort = (n: number): string => {
+  if (n <= 0) return '0';
+  if (n >= 1000) {
+    const k = parseFloat((n / 1000).toFixed(1));
+    return k % 1 === 0 ? `${k.toFixed(0)}k` : `${k.toFixed(1)}k`;
+  }
+  return n % 1 === 0 ? String(Math.round(n)) : n.toFixed(1);
+};
+
 const VehicleHistoryScreen = ({ route, navigation }: any) => {
   const { carId, carLabel } = route.params;
   const [loading, setLoading] = useState(true);
@@ -48,10 +57,16 @@ const VehicleHistoryScreen = ({ route, navigation }: any) => {
   const [imageViewer, setImageViewer] = useState<{ visible: boolean; url: string | null; title: string }>({
     visible: false, url: null, title: '',
   });
+  const [selectedKmIdx, setSelectedKmIdx] = useState<number | null>(null);
+  const [selectedOilIdx, setSelectedOilIdx] = useState<number | null>(null);
+  const [selectedMainIdx, setSelectedMainIdx] = useState<number | null>(null);
+  const [showAllKm, setShowAllKm] = useState(false);
+  const [showAllOil, setShowAllOil] = useState(false);
+  const [showAllMain, setShowAllMain] = useState(false);
   const { width } = useWindowDimensions();
   const chartWidth = width - 80;
 
-  useEffect(() => { loadHistory(); }, []);
+  useEffect(() => { loadHistory(); }, [carId]);
 
   const loadHistory = async () => {
     setLoading(true);
@@ -88,7 +103,7 @@ const VehicleHistoryScreen = ({ route, navigation }: any) => {
 
   const commonBarProps = {
     barWidth: 32, spacing: 14, roundedTop: true,
-    isAnimated: true, hideRules: false,
+    hideRules: false,
     rulesColor: '#F3F4F6', yAxisThickness: 0,
     xAxisThickness: 1, xAxisColor: '#E5E7EB',
     yAxisTextStyle: { color: '#9CA3AF', fontSize: 10 },
@@ -101,31 +116,55 @@ const VehicleHistoryScreen = ({ route, navigation }: any) => {
   }
 
   // KM chart
-  const kmChartData = kmTasks.map(t => ({
+  const kmChartData = kmTasks.map((t, idx) => ({
     value: t.newKm || 0,
     label: formatShortDate(t.completedAt),
+    dataPointColor: selectedKmIdx === idx ? '#3730A3' : '#4F46E5',
+    dataPointRadius: selectedKmIdx === idx ? 8 : 5,
+    onPress: () => setSelectedKmIdx(prev => prev === idx ? null : idx),
+    dataPointLabelComponent: selectedKmIdx === idx
+      ? () => <Text style={styles.barLabel} numberOfLines={1}>{fmtShort(t.newKm || 0)}</Text>
+      : undefined,
+    dataPointLabelShiftY: -20,
+    dataPointLabelShiftX: -10,
   }));
   const kmMax = Math.max(...kmChartData.map(d => d.value), 0);
   const kmYAxis = getNiceYAxis(kmMax);
 
   // Oil chart
-  const oilChartData = oilTasks.map(t => ({
+  const oilChartData = oilTasks.map((t, idx) => ({
     value: oilKmValue(t),
     label: formatShortDate(t.completedAt),
-    frontColor: '#059669',
+    frontColor: selectedOilIdx === idx ? '#047857' : '#059669',
+    onPress: () => setSelectedOilIdx(prev => prev === idx ? null : idx),
+    topLabelComponent: selectedOilIdx === idx
+      ? () => <Text style={styles.barLabel} numberOfLines={1}>{fmtShort(oilKmValue(t))}</Text>
+      : undefined,
   }));
   const oilMax = Math.max(...oilChartData.map(d => d.value), 0);
   const oilYAxis = getNiceYAxis(oilMax);
 
   // Maintenance chart
-  const mainChartData = maintenanceTasks.map(t => ({
+  const mainChartData = maintenanceTasks.map((t, idx) => ({
     value: parseFloat(t.maintenanceCost) || 0,
     label: formatShortDate(t.completedAt),
-    frontColor: '#F59E0B',
+    frontColor: selectedMainIdx === idx ? '#B45309' : '#F59E0B',
+    onPress: () => setSelectedMainIdx(prev => prev === idx ? null : idx),
+    topLabelComponent: selectedMainIdx === idx
+      ? () => <Text style={styles.barLabel} numberOfLines={1}>{fmtShort(parseFloat(t.maintenanceCost) || 0)}</Text>
+      : undefined,
   }));
   const mainMax = Math.max(...mainChartData.map(d => d.value), 0);
   const mainYAxis = getNiceYAxis(mainMax);
   const hasMainCost = mainChartData.some(d => d.value > 0);
+
+  // Reversed lists for display
+  const kmReversed = [...kmTasks].reverse();
+  const oilReversed = [...oilTasks].reverse();
+  const mainReversed = [...maintenanceTasks].reverse();
+  const kmDisplayed = showAllKm ? kmReversed : kmReversed.slice(0, 3);
+  const oilDisplayed = showAllOil ? oilReversed : oilReversed.slice(0, 3);
+  const mainDisplayed = showAllMain ? mainReversed : mainReversed.slice(0, 3);
 
   return (
     <>
@@ -148,7 +187,6 @@ const VehicleHistoryScreen = ({ route, navigation }: any) => {
                   width={chartWidth}
                   height={180}
                   color="#4F46E5"
-                  dataPointsColor="#4F46E5"
                   startFillColor="#4F46E580"
                   endFillColor="#4F46E508"
                   areaChart
@@ -164,17 +202,16 @@ const VehicleHistoryScreen = ({ route, navigation }: any) => {
                   yAxisThickness={0}
                   xAxisThickness={1}
                   xAxisColor="#E5E7EB"
-                  isAnimated
                 />
               </View>
-              {[...kmTasks].reverse().map(task => (
+              {kmDisplayed.map(task => (
                 <View key={task.id} style={styles.historyCard}>
                   <View style={styles.historyCardMain}>
                     <Text style={styles.historyCardDate}>{formatDate(task.completedAt)}</Text>
                     <Text style={styles.historyCardValue}>
-                      {task.newKm != null ? task.newKm.toLocaleString() : 'N/A'} km
+                      {task.newKm != null ? task.newKm.toLocaleString('pt-BR') : 'N/A'} km
                       {task.newKm != null && task.previousKm != null && (task.newKm - task.previousKm) >= 0
-                        ? `  (+${(task.newKm - task.previousKm).toLocaleString()} km)`
+                        ? `  (+${(task.newKm - task.previousKm).toLocaleString('pt-BR')} km)`
                         : ''}
                     </Text>
                     {(task.dashboardPhoto || task.dashboardPhotoUrl) && (
@@ -195,6 +232,13 @@ const VehicleHistoryScreen = ({ route, navigation }: any) => {
                   </TouchableOpacity>
                 </View>
               ))}
+              {kmReversed.length > 3 && (
+                <TouchableOpacity style={styles.showMoreBtn} onPress={() => setShowAllKm(v => !v)}>
+                  <Text style={styles.showMoreText}>
+                    {showAllKm ? 'Ver menos' : `Ver todos (${kmReversed.length} registros)`}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </>
           )}
         </View>
@@ -214,11 +258,11 @@ const VehicleHistoryScreen = ({ route, navigation }: any) => {
                   noOfSections={oilYAxis.noOfSections}
                 />
               </View>
-              {[...oilTasks].reverse().map(task => (
+              {oilDisplayed.map(task => (
                 <View key={task.id} style={styles.historyCard}>
                   <View style={styles.historyCardMain}>
                     <Text style={styles.historyCardDate}>{formatDate(task.completedAt)}</Text>
-                    <Text style={styles.historyCardValue}>{oilKmValue(task).toLocaleString()} km</Text>
+                    <Text style={styles.historyCardValue}>{oilKmValue(task).toLocaleString('pt-BR')} km</Text>
                   </View>
                   <TouchableOpacity
                     style={styles.detailsButton}
@@ -228,6 +272,13 @@ const VehicleHistoryScreen = ({ route, navigation }: any) => {
                   </TouchableOpacity>
                 </View>
               ))}
+              {oilReversed.length > 3 && (
+                <TouchableOpacity style={styles.showMoreBtn} onPress={() => setShowAllOil(v => !v)}>
+                  <Text style={styles.showMoreText}>
+                    {showAllOil ? 'Ver menos' : `Ver todos (${oilReversed.length} registros)`}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </>
           )}
         </View>
@@ -249,7 +300,7 @@ const VehicleHistoryScreen = ({ route, navigation }: any) => {
                   />
                 </View>
               )}
-              {[...maintenanceTasks].reverse().map(task => (
+              {mainDisplayed.map(task => (
                 <View key={task.id} style={styles.historyCard}>
                   <View style={styles.historyCardMain}>
                     <Text style={styles.historyCardDate}>{formatDate(task.completedAt)}</Text>
@@ -270,18 +321,15 @@ const VehicleHistoryScreen = ({ route, navigation }: any) => {
                   </TouchableOpacity>
                 </View>
               ))}
+              {mainReversed.length > 3 && (
+                <TouchableOpacity style={styles.showMoreBtn} onPress={() => setShowAllMain(v => !v)}>
+                  <Text style={styles.showMoreText}>
+                    {showAllMain ? 'Ver menos' : `Ver todos (${mainReversed.length} registros)`}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </>
           )}
-        </View>
-
-        {/* ===== DESPESAS (EM BREVE) ===== */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Despesas</Text>
-          <View style={styles.comingSoonCard}>
-            <Text style={styles.comingSoonIcon}>📊</Text>
-            <Text style={styles.comingSoonTitle}>Em breve</Text>
-            <Text style={styles.comingSoonText}>Historico de despesas do veiculo</Text>
-          </View>
         </View>
 
         <View style={styles.bottomSpace} />
@@ -339,13 +387,9 @@ const styles = StyleSheet.create({
     alignItems: 'center', elevation: 1,
   },
   emptySectionText: { fontSize: 14, color: '#9CA3AF' },
-  comingSoonCard: {
-    backgroundColor: '#F9FAFB', borderRadius: 12, padding: 32,
-    alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB',
-  },
-  comingSoonIcon: { fontSize: 36, marginBottom: 8 },
-  comingSoonTitle: { fontSize: 16, fontWeight: 'bold', color: '#9CA3AF', marginBottom: 4 },
-  comingSoonText: { fontSize: 13, color: '#9CA3AF' },
+  barLabel: { fontSize: 9, fontWeight: '700', color: '#374151', textAlign: 'center' },
+  showMoreBtn: { paddingVertical: 12, alignItems: 'center' },
+  showMoreText: { fontSize: 14, fontWeight: '600', color: '#4F46E5' },
   bottomSpace: { height: 32 },
 });
 

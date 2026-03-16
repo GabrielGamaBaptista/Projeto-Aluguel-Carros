@@ -3,10 +3,15 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
   Alert, ActivityIndicator, Switch, KeyboardAvoidingView, Platform,
 } from 'react-native';
+import { FileText, Wrench, Shield, ChevronDown } from 'lucide-react-native';
 import { EXPENSE_CATEGORIES, EXPENSE_SUBCATEGORIES } from '../constants/expenseCategories';
 import expenseService from '../services/expenseService';
 
 type Category = 'documentacao' | 'manutencao' | 'seguro';
+
+const CATEGORY_ICONS: Record<string, React.ComponentType<any>> = {
+  FileText, Wrench, Shield,
+};
 
 const formatDateInput = (text: string) => {
   const clean = text.replace(/\D/g, '');
@@ -23,7 +28,6 @@ const parseDateToISO = (text: string): string | null => {
   const month = parseInt(parts[1], 10);
   const year = parseInt(parts[2], 10);
   if (isNaN(day) || isNaN(month) || isNaN(year) || year < 2000) return null;
-  // Validar se a data e real (ex: 31/02 sera rejeitado)
   const dateObj = new Date(year, month - 1, day);
   if (dateObj.getFullYear() !== year || dateObj.getMonth() !== month - 1 || dateObj.getDate() !== day) {
     return null;
@@ -41,8 +45,10 @@ const AddExpenseScreen = ({ route, navigation }: any) => {
   const { carId, carInfo, tenantId, landlordId, expense } = route.params;
   const isEditing = !!expense;
 
-  const [category, setCategory] = useState<Category>(expense?.category || 'manutencao');
+  const [category, setCategory] = useState<Category | null>(expense?.category || null);
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [subcategory, setSubcategory] = useState<string | null>(expense?.subcategory || null);
+  const [showSubcategoryPicker, setShowSubcategoryPicker] = useState(false);
   const [customSubName, setCustomSubName] = useState('');
   const [maintenanceDescription, setMaintenanceDescription] = useState(expense?.maintenanceDescription || '');
   const [amount, setAmount] = useState(expense ? String(expense.amount) : '');
@@ -69,7 +75,7 @@ const AddExpenseScreen = ({ route, navigation }: any) => {
   };
 
   const getSubcategories = useMemo(() => {
-    if (category === 'seguro') return [];
+    if (!category || category === 'seguro') return [];
     const base = EXPENSE_SUBCATEGORIES[category] || [];
     const custom = customCategories.filter(c => c.parentCategory === category);
     const merged = [...base, ...custom.map(c => ({ key: c.key, label: c.name }))];
@@ -78,17 +84,21 @@ const AddExpenseScreen = ({ route, navigation }: any) => {
   }, [category, customCategories]);
 
   useEffect(() => {
-    // Pular o mount inicial para preservar subcategoria pre-preenchida no modo edicao
     if (isInitialMount.current) {
       isInitialMount.current = false;
       return;
     }
-    // Resetar subcategoria ao trocar categoria (inclusive em edicao)
     setSubcategory(null);
     setCustomSubName('');
+    setShowSubcategoryPicker(false);
   }, [category]);
 
   const handleSave = async () => {
+    if (!category) {
+      Alert.alert('Erro', 'Selecione uma categoria.');
+      return;
+    }
+
     const parsedAmount = parseFloat(amount.replace(/\./g, '').replace(',', '.'));
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
       Alert.alert('Erro', 'Informe um valor valido.');
@@ -160,6 +170,15 @@ const AddExpenseScreen = ({ route, navigation }: any) => {
     }
   };
 
+  const renderCategoryIcon = (iconName: string, color: string, size: number = 18) => {
+    const IconComp = CATEGORY_ICONS[iconName];
+    if (!IconComp) return null;
+    return <IconComp size={size} color={color} />;
+  };
+
+  const selectedCatInfo = category ? EXPENSE_CATEGORIES[category] : null;
+  const selectedSubInfo = subcategory ? getSubcategories.find(s => s.key === subcategory) : null;
+
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
@@ -167,48 +186,89 @@ const AddExpenseScreen = ({ route, navigation }: any) => {
 
         {/* Categoria */}
         <Text style={styles.label}>Categoria *</Text>
-        <View style={styles.chipsRow}>
-          {(Object.keys(EXPENSE_CATEGORIES) as Category[]).map(key => {
-            const cat = EXPENSE_CATEGORIES[key];
-            const isActive = category === key;
-            return (
-              <TouchableOpacity
-                key={key}
-                style={[styles.chip, isActive && { backgroundColor: cat.color, borderColor: cat.color }]}
-                onPress={() => setCategory(key)}
-              >
-                <Text style={[styles.chipText, isActive && styles.chipTextActive]}>
-                  {cat.icon} {cat.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        <TouchableOpacity
+          style={styles.selectBox}
+          onPress={() => {
+            setShowCategoryPicker(!showCategoryPicker);
+            setShowSubcategoryPicker(false);
+          }}
+        >
+          {selectedCatInfo ? (
+            <View style={styles.selectValue}>
+              {renderCategoryIcon(selectedCatInfo.icon, selectedCatInfo.color)}
+              <Text style={styles.selectValueText}>{selectedCatInfo.label}</Text>
+            </View>
+          ) : (
+            <Text style={styles.selectPlaceholder}>Selecione a categoria</Text>
+          )}
+          <ChevronDown size={20} color="#9CA3AF" style={showCategoryPicker ? { transform: [{ rotate: '180deg' }] } : undefined} />
+        </TouchableOpacity>
+
+        {showCategoryPicker && (
+          <View style={styles.pickerList}>
+            {(Object.keys(EXPENSE_CATEGORIES) as Category[]).map(key => {
+              const cat = EXPENSE_CATEGORIES[key];
+              const isActive = category === key;
+              return (
+                <TouchableOpacity
+                  key={key}
+                  style={[styles.pickerItem, isActive && styles.pickerItemActive]}
+                  onPress={() => {
+                    setCategory(key);
+                    setShowCategoryPicker(false);
+                  }}
+                >
+                  {renderCategoryIcon(cat.icon, isActive ? '#4F46E5' : cat.color)}
+                  <Text style={[styles.pickerItemText, isActive && styles.pickerItemTextActive]}>{cat.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
 
         {/* Subcategoria */}
-        {category !== 'seguro' && (
+        {category !== null && category !== 'seguro' && (
           <>
             <Text style={styles.label}>Subcategoria *</Text>
-            <View style={styles.subcatGrid}>
-              {getSubcategories.map(sub => {
-                const isActive = subcategory === sub.key;
-                return (
-                  <TouchableOpacity
-                    key={sub.key}
-                    style={[styles.subcatChip, isActive && styles.subcatChipActive]}
-                    onPress={() => {
-                      setSubcategory(sub.key);
-                      if (sub.key !== 'outros') setCustomSubName('');
-                    }}
-                  >
-                    <Text style={[styles.subcatText, isActive && styles.subcatTextActive]}>{sub.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            <TouchableOpacity
+              style={styles.selectBox}
+              onPress={() => {
+                setShowSubcategoryPicker(!showSubcategoryPicker);
+                setShowCategoryPicker(false);
+              }}
+            >
+              {selectedSubInfo ? (
+                <Text style={styles.selectValueText}>{selectedSubInfo.label}</Text>
+              ) : (
+                <Text style={styles.selectPlaceholder}>Selecione a subcategoria</Text>
+              )}
+              <ChevronDown size={20} color="#9CA3AF" style={showSubcategoryPicker ? { transform: [{ rotate: '180deg' }] } : undefined} />
+            </TouchableOpacity>
+
+            {showSubcategoryPicker && (
+              <View style={styles.pickerList}>
+                {getSubcategories.map(sub => {
+                  const isActive = subcategory === sub.key;
+                  return (
+                    <TouchableOpacity
+                      key={sub.key}
+                      style={[styles.pickerItem, isActive && styles.pickerItemActive]}
+                      onPress={() => {
+                        setSubcategory(sub.key);
+                        setShowSubcategoryPicker(false);
+                        if (sub.key !== 'outros') setCustomSubName('');
+                      }}
+                    >
+                      <Text style={[styles.pickerItemText, isActive && styles.pickerItemTextActive]}>{sub.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+
             {subcategory === 'outros' && (
               <TextInput
-                style={styles.input}
+                style={[styles.input, { marginTop: 8 }]}
                 placeholder="Nome da subcategoria"
                 placeholderTextColor="#9CA3AF"
                 value={customSubName}
@@ -303,24 +363,29 @@ const AddExpenseScreen = ({ route, navigation }: any) => {
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: '#F3F4F6' },
   container: { flex: 1 },
-  content: { padding: 20, paddingBottom: 40 },
+  content: { padding: 20, paddingBottom: 100 },
   carLabel: { fontSize: 14, color: '#4F46E5', fontWeight: '600', marginBottom: 20 },
   label: { fontSize: 14, fontWeight: '700', color: '#374151', marginBottom: 8, marginTop: 16 },
-  chipsRow: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
-  chip: {
-    paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20,
-    borderWidth: 1.5, borderColor: '#D1D5DB', backgroundColor: '#fff',
+  selectBox: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 10,
+    padding: 14, backgroundColor: '#fff',
   },
-  chipText: { fontSize: 14, color: '#374151', fontWeight: '600' },
-  chipTextActive: { color: '#fff' },
-  subcatGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  subcatChip: {
-    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16,
-    borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#fff',
+  selectValue: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  selectValueText: { fontSize: 15, color: '#1F2937', fontWeight: '600' },
+  selectPlaceholder: { fontSize: 15, color: '#9CA3AF' },
+  pickerList: {
+    backgroundColor: '#fff', borderWidth: 1, borderColor: '#E5E7EB',
+    borderRadius: 10, marginTop: 4, overflow: 'hidden',
   },
-  subcatChipActive: { backgroundColor: '#EEF2FF', borderColor: '#4F46E5' },
-  subcatText: { fontSize: 13, color: '#6B7280', fontWeight: '500' },
-  subcatTextActive: { color: '#4F46E5', fontWeight: '700' },
+  pickerItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 14, paddingVertical: 12,
+    borderBottomWidth: 1, borderBottomColor: '#F3F4F6',
+  },
+  pickerItemActive: { backgroundColor: '#EEF2FF' },
+  pickerItemText: { fontSize: 15, color: '#374151', fontWeight: '500' },
+  pickerItemTextActive: { color: '#4F46E5', fontWeight: '700' },
   input: {
     borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 10,
     padding: 14, fontSize: 15, backgroundColor: '#fff', color: '#1F2937',

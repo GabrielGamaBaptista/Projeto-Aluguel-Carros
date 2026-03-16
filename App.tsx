@@ -171,7 +171,7 @@ export default function App() {
             <Stack.Screen name="Charges" component={ChargesScreen} options={{ headerShown: true, headerTitle: 'Cobranças', headerBackTitle: 'Voltar', headerTintColor: '#4F46E5' }} />
             <Stack.Screen name="PaymentDetails" component={PaymentDetailsScreen} options={{ headerShown: true, headerTitle: 'Detalhes do Pagamento', headerBackTitle: 'Voltar', headerTintColor: '#4F46E5' }} />
             <Stack.Screen name="VehicleHistory" component={VehicleHistoryScreen} options={{ headerShown: true, headerTitle: 'Historico do Veiculo', headerBackTitle: 'Voltar', headerTintColor: '#4F46E5' }} />
-            <Stack.Screen name="AddExpense" component={AddExpenseScreen} options={{ headerShown: true, headerTitle: 'Lancar Despesa', headerBackTitle: 'Voltar', headerTintColor: '#4F46E5' }} />
+            <Stack.Screen name="AddExpense" component={AddExpenseScreen} options={{ headerShown: true, headerTitle: 'Despesas', headerBackTitle: 'Voltar', headerTintColor: '#4F46E5' }} />
           </>
         )}
       </Stack.Navigator>
