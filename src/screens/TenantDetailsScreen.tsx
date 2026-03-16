@@ -4,6 +4,7 @@ import {
   View, Text, Image, TouchableOpacity, StyleSheet, ScrollView,
   ActivityIndicator, Linking, Alert,
 } from 'react-native';
+import { Phone, MessageCircle, Mail } from 'lucide-react-native';
 import { usersService } from '../services/usersService';
 import ImageViewer from '../components/ImageViewer';
 
@@ -86,9 +87,13 @@ const TenantDetailsScreen = ({ route }) => {
     <ScrollView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{tenant.name?.charAt(0)?.toUpperCase() || '?'}</Text>
-        </View>
+        {tenant.profilePhoto ? (
+          <Image source={{ uri: tenant.profilePhoto }} style={styles.avatarImage} />
+        ) : (
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{tenant.name?.charAt(0)?.toUpperCase() || '?'}</Text>
+          </View>
+        )}
         <Text style={styles.name}>{tenant.name}</Text>
         <Text style={styles.role}>Locatario</Text>
       </View>
@@ -97,19 +102,19 @@ const TenantDetailsScreen = ({ route }) => {
       <View style={styles.contactButtons}>
         {hasPhone && (
           <TouchableOpacity style={styles.contactBtn} onPress={() => handleCall(tenant.phone)}>
-            <Text style={styles.contactBtnIcon}>📞</Text>
+            <Phone size={18} color="#374151" />
             <Text style={styles.contactBtnText}>Ligar</Text>
           </TouchableOpacity>
         )}
         {hasPhone && (
           <TouchableOpacity style={[styles.contactBtn, styles.whatsappBtn]} onPress={() => handleWhatsApp(tenant.phone)}>
-            <Text style={styles.contactBtnIcon}>💬</Text>
+            <MessageCircle size={18} color="#065F46" />
             <Text style={[styles.contactBtnText, styles.whatsappText]}>WhatsApp</Text>
           </TouchableOpacity>
         )}
         {tenant.email && (
           <TouchableOpacity style={styles.contactBtn} onPress={() => handleEmail(tenant.email)}>
-            <Text style={styles.contactBtnIcon}>📧</Text>
+            <Mail size={18} color="#374151" />
             <Text style={styles.contactBtnText}>Email</Text>
           </TouchableOpacity>
         )}
@@ -165,6 +170,7 @@ const styles = StyleSheet.create({
   header: { backgroundColor: '#4F46E5', padding: 32, alignItems: 'center' },
   avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
   avatarText: { fontSize: 36, fontWeight: 'bold', color: '#4F46E5' },
+  avatarImage: { width: 80, height: 80, borderRadius: 40, marginBottom: 12 },
   name: { fontSize: 24, fontWeight: 'bold', color: '#fff' },
   role: { fontSize: 14, color: '#C7D2FE', marginTop: 4 },
   // Contact buttons

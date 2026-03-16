@@ -9,6 +9,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { Camera } from 'lucide-react-native';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { uploadImageToCloudinary } from '../config/cloudinary';
 
@@ -103,7 +104,7 @@ const PhotoPicker = ({ onPhotoSelected, label, currentPhotoUrl }) => {
           <Image source={{ uri: photoUrl }} style={styles.photo} />
         ) : (
           <View style={styles.placeholder}>
-            <Text style={styles.placeholderText}>📷</Text>
+            <Camera size={32} color="#9CA3AF" />
             <Text style={styles.placeholderSubtext}>Tirar Foto</Text>
           </View>
         )}

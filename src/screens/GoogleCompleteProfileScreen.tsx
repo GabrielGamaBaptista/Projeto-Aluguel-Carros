@@ -6,6 +6,8 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, Alert,
   ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform,
 } from 'react-native';
+import { PartyPopper, Building2, User, ClipboardList } from 'lucide-react-native';
+import { MdiCar } from '../components/icons/MdiIcons';
 import { authService } from '../services/authService';
 import PhotoPicker from '../components/PhotoPicker';
 import {
@@ -47,6 +49,9 @@ const GoogleCompleteProfileScreen = ({ onComplete }) => {
   const [cnhFrontPhoto, setCnhFrontPhoto] = useState('');
   const [cnhBackPhoto, setCnhBackPhoto] = useState('');
   const [residenceProofPhoto, setResidenceProofPhoto] = useState('');
+
+  // Foto de perfil (opcional)
+  const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
 
   const [errors, setErrors] = useState({});
   const setError = (f, m) => setErrors(p => ({ ...p, [f]: m }));
@@ -216,6 +221,7 @@ const GoogleCompleteProfileScreen = ({ onComplete }) => {
       cep: cep.replace(/\D/g, ''), street: street.trim(), number: number.trim(),
       complement: complement.trim(), neighborhood: neighborhood.trim(),
       city: city.trim(), state, address: fullAddress,
+      profilePhoto: profilePhoto || null,
     };
     if (role === 'locatario') {
       userData.cnhNumber = cnhNumber.replace(/\D/g, '');
@@ -238,7 +244,7 @@ const GoogleCompleteProfileScreen = ({ onComplete }) => {
   const renderStep1 = () => (
     <>
       <View style={styles.headerCenter}>
-        <Text style={styles.icon}>🎉</Text>
+        <PartyPopper size={56} color="#4F46E5" />
         <Text style={styles.title}>Bem-vindo!</Text>
         <Text style={styles.subtitle}>Conta Google conectada. Complete seu cadastro.</Text>
       </View>
@@ -250,11 +256,11 @@ const GoogleCompleteProfileScreen = ({ onComplete }) => {
       <Text style={styles.sectionTitle}>Eu sou:</Text>
       <View style={styles.roleRow}>
         <TouchableOpacity style={[styles.roleCard, role === 'locador' && styles.roleCardActive]} onPress={() => setRole('locador')}>
-          <Text style={styles.roleIcon}>🏢</Text>
+          <Building2 size={28} color={role === 'locador' ? '#4F46E5' : '#6B7280'} style={{ marginBottom: 6 }} />
           <Text style={[styles.roleTitle, role === 'locador' && styles.roleTitleActive]}>Locador</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.roleCard, role === 'locatario' && styles.roleCardActive]} onPress={() => setRole('locatario')}>
-          <Text style={styles.roleIcon}>🚗</Text>
+          <MdiCar size={28} color={role === 'locatario' ? '#4F46E5' : '#6B7280'} />
           <Text style={[styles.roleTitle, role === 'locatario' && styles.roleTitleActive]}>Locatario</Text>
         </TouchableOpacity>
       </View>
@@ -263,6 +269,11 @@ const GoogleCompleteProfileScreen = ({ onComplete }) => {
         <TextInput style={[styles.input, errors.name && styles.inputError]} placeholder="Seu nome completo" placeholderTextColor="#9CA3AF" value={name} onChangeText={(t) => { setName(t); clearError('name'); }} autoCapitalize="words" /><ErrorText field="name" /></View>
       <View style={styles.field}><Text style={styles.label}>Telefone *</Text>
         <TextInput style={[styles.input, errors.phone && styles.inputError]} placeholder="(00) 00000-0000" placeholderTextColor="#9CA3AF" value={phone} onChangeText={(t) => { setPhone(formatPhone(t)); clearError('phone'); }} keyboardType="phone-pad" /><ErrorText field="phone" /></View>
+      <PhotoPicker
+        label="Foto de Perfil (opcional)"
+        onPhotoSelected={setProfilePhoto}
+        currentPhotoUrl={profilePhoto}
+      />
     </>
   );
 
@@ -277,13 +288,21 @@ const GoogleCompleteProfileScreen = ({ onComplete }) => {
             <View style={styles.field}>
               <Text style={styles.label}>Tipo de Pessoa *</Text>
               <View style={styles.personTypeRow}>
-                {[{ key: 'pf', label: 'Pessoa Fisica', icon: '👤' }, { key: 'pj', label: 'Pessoa Juridica', icon: '🏢' }, { key: 'mei', label: 'MEI', icon: '📋' }].map(pt => (
-                  <TouchableOpacity key={pt.key} style={[styles.personTypeCard, personType === pt.key && styles.personTypeActive]}
+                {[{ key: 'pf', label: 'Pessoa Fisica' }, { key: 'pj', label: 'Pessoa Juridica' }, { key: 'mei', label: 'MEI' }].map(pt => {
+                  const isActive = personType === pt.key;
+                  const iconColor = isActive ? '#4F46E5' : '#6B7280';
+                  return (
+                  <TouchableOpacity key={pt.key} style={[styles.personTypeCard, isActive && styles.personTypeActive]}
                     onPress={() => { setPersonType(pt.key); clearError('personType'); setCpf(''); setBirthDate(''); setCnpj(''); setCompanyName(''); }}>
-                    <Text style={styles.personTypeIcon}>{pt.icon}</Text>
-                    <Text style={[styles.personTypeLabel, personType === pt.key && styles.personTypeLabelActive]}>{pt.label}</Text>
+                    <View style={styles.personTypeIcon}>
+                      {pt.key === 'pf' && <User size={22} color={iconColor} />}
+                      {pt.key === 'pj' && <Building2 size={22} color={iconColor} />}
+                      {pt.key === 'mei' && <ClipboardList size={22} color={iconColor} />}
+                    </View>
+                    <Text style={[styles.personTypeLabel, isActive && styles.personTypeLabelActive]}>{pt.label}</Text>
                   </TouchableOpacity>
-                ))}
+                  );
+                })}
               </View>
               <ErrorText field="personType" />
             </View>
@@ -457,7 +476,7 @@ const styles = StyleSheet.create({
   personTypeRow: { flexDirection: 'row', gap: 8 },
   personTypeCard: { flex: 1, padding: 14, borderRadius: 10, borderWidth: 2, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB', alignItems: 'center' },
   personTypeActive: { borderColor: '#4F46E5', backgroundColor: '#EEF2FF' },
-  personTypeIcon: { fontSize: 22, marginBottom: 4 },
+  personTypeIcon: { marginBottom: 4, alignItems: 'center' },
   personTypeLabel: { fontSize: 12, fontWeight: '600', color: '#6B7280', textAlign: 'center' },
   personTypeLabelActive: { color: '#4F46E5' },
   // Buttons

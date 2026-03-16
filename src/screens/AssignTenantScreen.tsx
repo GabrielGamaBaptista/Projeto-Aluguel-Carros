@@ -4,6 +4,7 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, Alert,
   ActivityIndicator, FlatList, ScrollView,
 } from 'react-native';
+import { Search } from 'lucide-react-native';
 import { carsService } from '../services/carsService';
 import { authService } from '../services/authService';
 import { tenantRequestService } from '../services/tenantRequestService';
@@ -223,7 +224,7 @@ const AssignTenantScreen = ({ route, navigation }) => {
                   <View key={req.id} style={styles.pendingCard}>
                     <View style={styles.pendingInfo}>
                       <View style={styles.pendingBadge}>
-                        <Text style={styles.pendingBadgeText}>⏳ Aguardando</Text>
+                        <Text style={styles.pendingBadgeText}>Aguardando</Text>
                       </View>
                       <Text style={styles.pendingText}>
                         Solicitacao enviada. Aguardando resposta do locatario.
@@ -240,7 +241,7 @@ const AssignTenantScreen = ({ route, navigation }) => {
             {/* Instrucao inicial */}
             {searchResults.length === 0 && pendingRequests.length === 0 && (
               <View style={styles.emptyContainer}>
-                <Text style={styles.emptyIcon}>🔍</Text>
+                <Search size={64} color="#D1D5DB" />
                 <Text style={styles.emptyTitle}>Busque um locatario</Text>
                 <Text style={styles.emptySubtitle}>Digite o email ou CPF do locatario que deseja atribuir a este carro. Ele recebera uma notificacao para aceitar.</Text>
               </View>

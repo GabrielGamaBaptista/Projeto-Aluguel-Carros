@@ -4,6 +4,8 @@ import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   RefreshControl, Alert, ScrollView, ActivityIndicator,
 } from 'react-native';
+import { Bell, ClipboardList } from 'lucide-react-native';
+import { MdiCar, MdiPin } from '../components/icons/MdiIcons';
 import { authService } from '../services/authService';
 import { carsService } from '../services/carsService';
 import { tasksService } from '../services/tasksService';
@@ -20,6 +22,7 @@ const HomeScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [acceptingId, setAcceptingId] = useState(null);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'rented' | 'available'>('all');
 
   useEffect(() => { loadData(); }, []);
   useEffect(() => {
@@ -161,7 +164,7 @@ const HomeScreen = ({ navigation }) => {
           {pendingRequests.map(req => (
             <View key={req.id} style={styles.requestCard}>
               <View style={styles.requestHeader}>
-                <Text style={styles.requestIcon}>🔔</Text>
+                <Bell size={28} color="#4F46E5" style={{ marginRight: 12 }} />
                 <View style={styles.requestInfo}>
                   <Text style={styles.requestTitle}>{req.landlordName || 'Locador'} quer atribuir voce ao carro:</Text>
                   <Text style={styles.requestCar}>{req.carInfo}</Text>
@@ -187,7 +190,7 @@ const HomeScreen = ({ navigation }) => {
         <Text style={styles.sectionTitle}>Meu Veiculo</Text>
         {cars.length === 0 ? (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyIcon}>🚗</Text>
+            <MdiCar size={48} color="#D1D5DB" />
             <Text style={styles.emptyTitle}>Nenhum veiculo atribuido</Text>
             <Text style={styles.emptySubtitle}>Aguarde seu locador enviar uma solicitacao</Text>
           </View>
@@ -196,7 +199,7 @@ const HomeScreen = ({ navigation }) => {
             <TouchableOpacity key={car.id} style={styles.carCardTenant}
               onPress={() => navigation.navigate('CarDetails', { carId: car.id })}>
               <View style={styles.carCardHeader}>
-                <Text style={styles.carEmoji}>🚗</Text>
+                <MdiCar size={40} color="#4F46E5" style={{ marginRight: 14 }} />
                 <View style={styles.carCardInfo}>
                   <Text style={styles.carBrand}>{car.brand}</Text>
                   <Text style={styles.carModel}>{car.model}</Text>
@@ -217,7 +220,7 @@ const HomeScreen = ({ navigation }) => {
         <Text style={styles.sectionTitle}>Mural de Avisos</Text>
         {muralPosts.length === 0 ? (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyIcon}>📋</Text>
+            <ClipboardList size={48} color="#D1D5DB" />
             <Text style={styles.emptyTitle}>Nenhum aviso</Text>
             <Text style={styles.emptySubtitle}>Os avisos do seu locador aparecerao aqui</Text>
           </View>
@@ -225,7 +228,7 @@ const HomeScreen = ({ navigation }) => {
           muralPosts.map(post => (
             <View key={post.id} style={styles.muralCard}>
               <View style={styles.muralCardHeader}>
-                {post.pinned && <Text style={styles.pinnedBadge}>📌</Text>}
+                {post.pinned && <MdiPin size={14} color="#B45309" />}
                 <View style={[styles.categoryTag, { backgroundColor: getCategoryColor(post.category) + '15' }]}>
                   <Text style={[styles.categoryTagText, { color: getCategoryColor(post.category) }]}>{getCategoryLabel(post.category)}</Text>
                 </View>
@@ -242,63 +245,87 @@ const HomeScreen = ({ navigation }) => {
   );
 
   // ===== RENDER LOCADOR =====
-  const renderLandlordView = () => (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>Ola, {userProfile?.name}!</Text>
-          <Text style={styles.role}>Locador</Text>
+  const renderLandlordView = () => {
+    const filteredCars = statusFilter === 'all' ? cars : cars.filter(c => c.status === statusFilter);
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.greeting}>Ola, {userProfile?.name}!</Text>
+            <Text style={styles.role}>Locador</Text>
+          </View>
         </View>
-      </View>
 
-      <View style={styles.statsContainer}>
-        <View style={styles.statCard}>
-          <Text style={styles.statNumber}>{cars.length}</Text>
-          <Text style={styles.statLabel}>Total de Carros</Text>
+        <View style={styles.statsContainer}>
+          <View style={styles.statCard}>
+            <Text style={styles.statNumber}>{cars.length}</Text>
+            <Text style={styles.statLabel}>Total de Carros</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statNumber}>{cars.filter(c => c.status === 'rented').length}</Text>
+            <Text style={styles.statLabel}>Alugados</Text>
+          </View>
         </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statNumber}>{cars.filter(c => c.status === 'rented').length}</Text>
-          <Text style={styles.statLabel}>Alugados</Text>
-        </View>
-      </View>
 
-      <FlatList data={cars} keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <TouchableOpacity style={styles.carCard} onPress={() => navigation.navigate('CarDetails', { carId: item.id })}>
-            <View style={styles.carHeader}>
-              <Text style={styles.carBrand}>{item.brand}</Text>
-              <View style={[styles.statusBadge, item.status === 'rented' && styles.statusRented]}>
-                <Text style={styles.statusText}>{item.status === 'rented' ? 'Alugado' : 'Disponivel'}</Text>
-              </View>
-            </View>
-            <Text style={styles.carModel}>{item.model}</Text>
-            <Text style={styles.carYear}>{item.year} - {item.plate}</Text>
-            <View style={styles.carFooter}>
-              <Text style={styles.carKm}>{item.totalKm?.toLocaleString() || 0} km</Text>
-              {item.tenantName && <Text style={styles.tenantNameLabel}>{item.tenantName}</Text>}
-            </View>
-          </TouchableOpacity>
-        )}
-        contentContainerStyle={styles.list}
-        ListEmptyComponent={
-          <TouchableOpacity style={styles.addCarCardEmpty} onPress={() => navigation.navigate('AddCar')}>
-            <Text style={styles.addCarEmptyIcon}>+</Text>
-            <Text style={styles.addCarEmptyTitle}>Adicionar seu primeiro carro</Text>
-            <Text style={styles.addCarEmptySubtitle}>Toque aqui para comecar</Text>
-          </TouchableOpacity>
-        }
-        ListFooterComponent={
-          cars.length > 0 ? (
-            <TouchableOpacity style={styles.addCarCard} onPress={() => navigation.navigate('AddCar')}>
-              <Text style={styles.addCarPlusIcon}>+</Text>
-              <Text style={styles.addCarCardText}>Adicionar Carro</Text>
+        <View style={styles.filterRow}>
+          {([['all', 'Todos'], ['rented', 'Alugados'], ['available', 'Disponiveis']] as const).map(([val, label]) => (
+            <TouchableOpacity
+              key={val}
+              style={[styles.filterChip, statusFilter === val && styles.filterChipActive]}
+              onPress={() => setStatusFilter(val)}>
+              <Text style={[styles.filterChipText, statusFilter === val && styles.filterChipTextActive]}>{label}</Text>
             </TouchableOpacity>
-          ) : null
-        }
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      />
-    </View>
-  );
+          ))}
+        </View>
+
+        <FlatList
+          data={filteredCars}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <TouchableOpacity style={styles.carCard} onPress={() => navigation.navigate('CarDetails', { carId: item.id })}>
+              <View style={styles.carHeader}>
+                <Text style={styles.carBrand}>{item.brand}</Text>
+                <View style={[styles.statusBadge, item.status === 'rented' && styles.statusRented]}>
+                  <Text style={styles.statusText}>{item.status === 'rented' ? 'Alugado' : 'Disponivel'}</Text>
+                </View>
+              </View>
+              <Text style={styles.carModel}>{item.model}</Text>
+              <Text style={styles.carYear}>{item.year} - {item.plate}</Text>
+              <View style={styles.carFooter}>
+                <Text style={styles.carKm}>{item.totalKm?.toLocaleString() || 0} km</Text>
+                {item.tenantName && <Text style={styles.tenantNameLabel}>{item.tenantName}</Text>}
+              </View>
+            </TouchableOpacity>
+          )}
+          contentContainerStyle={styles.list}
+          ListEmptyComponent={
+            cars.length === 0 ? (
+              <TouchableOpacity style={styles.addCarCardEmpty} onPress={() => navigation.navigate('AddCar')}>
+                <Text style={styles.addCarEmptyIcon}>+</Text>
+                <Text style={styles.addCarEmptyTitle}>Adicionar seu primeiro carro</Text>
+                <Text style={styles.addCarEmptySubtitle}>Toque aqui para comecar</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.emptyCard}>
+                <MdiCar size={48} color="#D1D5DB" />
+                <Text style={styles.emptyTitle}>Nenhum carro encontrado</Text>
+                <Text style={styles.emptySubtitle}>Nenhum veiculo com o status selecionado</Text>
+              </View>
+            )
+          }
+          ListFooterComponent={
+            filteredCars.length > 0 ? (
+              <TouchableOpacity style={styles.addCarCard} onPress={() => navigation.navigate('AddCar')}>
+                <Text style={styles.addCarPlusIcon}>+</Text>
+                <Text style={styles.addCarCardText}>Adicionar Carro</Text>
+              </TouchableOpacity>
+            ) : null
+          }
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        />
+      </View>
+    );
+  };
 
   if (loading) return <View style={styles.container}><Text>Carregando...</Text></View>;
   return isTenant ? renderTenantView() : renderLandlordView();
@@ -379,6 +406,14 @@ const styles = StyleSheet.create({
   addCarPlusIcon: { fontSize: 28, color: '#4F46E5', fontWeight: 'bold' },
   addCarCardText: { fontSize: 15, color: '#4F46E5', fontWeight: '600', marginTop: 2 },
   bottomSpace: { height: 40 },
+  filterRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 8, paddingBottom: 8 },
+  filterChip: {
+    paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20,
+    backgroundColor: '#fff', borderWidth: 1, borderColor: '#D1D5DB',
+  },
+  filterChipActive: { backgroundColor: '#4F46E5', borderColor: '#4F46E5' },
+  filterChipText: { fontSize: 13, fontWeight: '600', color: '#6B7280' },
+  filterChipTextActive: { color: '#fff' },
 });
 
 export default HomeScreen;

@@ -4,6 +4,7 @@ import {
   View, Text, TouchableOpacity, StyleSheet,
   RefreshControl, SectionList, ScrollView,
 } from 'react-native';
+import { Gauge, Camera, Droplets, Wrench, ClipboardList, CheckCircle2 } from 'lucide-react-native';
 import { authService } from '../services/authService';
 import { tasksService } from '../services/tasksService';
 import { carsService } from '../services/carsService';
@@ -73,9 +74,13 @@ const TasksScreen = ({ navigation }) => {
   const onRefresh = async () => { setRefreshing(true); await loadTasks(); setRefreshing(false); };
 
   const getTaskIcon = (type) => {
+    const color = getTaskColor(type);
     switch (type) {
-      case 'km_update': return '📍'; case 'photo_inspection': return '📸';
-      case 'oil_change': return '🛢'; case 'maintenance': return '🔧'; default: return '📋';
+      case 'km_update': return <Gauge size={20} color={color} />;
+      case 'photo_inspection': return <Camera size={20} color={color} />;
+      case 'oil_change': return <Droplets size={20} color={color} />;
+      case 'maintenance': return <Wrench size={20} color={color} />;
+      default: return <ClipboardList size={20} color={color} />;
     }
   };
 
@@ -152,7 +157,7 @@ const TasksScreen = ({ navigation }) => {
       >
         <View style={styles.taskHeader}>
           <View style={[styles.taskIcon, { backgroundColor: getTaskColor(item.type) + '20' }]}>
-            <Text style={styles.taskIconText}>{getTaskIcon(item.type)}</Text>
+            {getTaskIcon(item.type)}
           </View>
           <View style={styles.taskInfo}>
             <Text style={styles.taskTitle}>{item.title}</Text>
@@ -170,7 +175,7 @@ const TasksScreen = ({ navigation }) => {
 
         {isRevision && (
           <View style={styles.revisionTag}>
-            <Text style={styles.revisionTagText}>⚠️ Correcao solicitada</Text>
+            <Text style={styles.revisionTagText}>Correcao solicitada</Text>
           </View>
         )}
 
@@ -264,7 +269,9 @@ const TasksScreen = ({ navigation }) => {
         stickySectionHeadersEnabled={false}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>{activeTab === 'pending' ? '✅' : '📂'}</Text>
+            {activeTab === 'pending'
+              ? <CheckCircle2 size={48} color="#D1D5DB" />
+              : <ClipboardList size={48} color="#D1D5DB" />}
             <Text style={styles.emptyTitle}>{activeTab === 'pending' ? 'Nenhuma tarefa pendente!' : 'Nenhuma tarefa concluida'}</Text>
             <Text style={styles.emptySubtitle}>{activeTab === 'pending' ? 'Todas as tarefas estao em dia' : 'As tarefas concluidas aparecerao aqui'}</Text>
           </View>
@@ -333,9 +340,8 @@ const styles = StyleSheet.create({
   approvedTag: { backgroundColor: '#D1FAE5', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: '#059669' },
   approvedTagText: { fontSize: 12, color: '#065F46', fontWeight: '700' },
   // Empty
-  emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60 },
-  emptyText: { fontSize: 64, marginBottom: 16 },
-  emptyTitle: { fontSize: 18, fontWeight: 'bold', color: '#1F2937', marginBottom: 8 },
+  emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60, gap: 12 },
+  emptyTitle: { fontSize: 18, fontWeight: 'bold', color: '#1F2937', marginBottom: 4 },
   emptySubtitle: { fontSize: 14, color: '#6B7280', textAlign: 'center' },
 });
 

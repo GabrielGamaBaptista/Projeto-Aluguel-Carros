@@ -437,6 +437,9 @@ const contracts = require('./src/handlers/contracts');
 exports.createContractCF = contracts.createContract;
 exports.cancelContract = contracts.cancelContract;
 
+const taskNotifications = require('./src/handlers/taskNotifications');
+exports.notifyOverdueTasks = taskNotifications.notifyOverdueTasks;
+
 // Editar contrato: apenas rentAmount permanente
 exports.editContract = onCall({ cors: true, invoker: 'public' }, async (request) => {
   if (!request.auth) {

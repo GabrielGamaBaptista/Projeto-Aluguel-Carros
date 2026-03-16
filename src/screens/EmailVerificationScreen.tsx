@@ -1,6 +1,7 @@
 // src/screens/EmailVerificationScreen.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, SafeAreaView } from 'react-native';
+import { Mail } from 'lucide-react-native';
 import { authService } from '../services/authService';
 
 const EmailVerificationScreen = ({ onVerified }) => {
@@ -44,7 +45,7 @@ const EmailVerificationScreen = ({ onVerified }) => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        <View style={styles.iconC}><Text style={styles.icon}>📧</Text></View>
+        <View style={styles.iconC}><Mail size={48} color="#4F46E5" /></View>
         <Text style={styles.title}>Verifique seu Email</Text>
         <Text style={styles.subtitle}>Enviamos um link para:</Text>
         <Text style={styles.email}>{userEmail}</Text>

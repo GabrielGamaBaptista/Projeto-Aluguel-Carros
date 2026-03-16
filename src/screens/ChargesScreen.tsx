@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, RefreshControl, Modal, TextInput, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useNavigation } from '@react-navigation/native';
+import { MdiCash } from '../components/icons/MdiIcons';
 import paymentService from '../services/paymentService';
 import { auth } from '../config/firebase';
 
@@ -184,7 +185,7 @@ const ChargesScreen: React.FC<Props> = ({ route }) => {
             carId, tenantId, landlordId, carInfo, tenantName, landlordName,
           })}
         >
-          <Text style={styles.setupContractIcon}>💳</Text>
+          <MdiCash size={28} color="#4F46E5" style={{ marginRight: 12 }} />
           <View style={styles.setupContractTexts}>
             <Text style={styles.setupContractTitle}>Configurar Pagamento Recorrente</Text>
             <Text style={styles.setupContractSubtitle}>Crie um contrato para cobranças automáticas</Text>

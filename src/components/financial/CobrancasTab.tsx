@@ -4,6 +4,7 @@ import {
   ScrollView, ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { MdiCash } from '../icons/MdiIcons';
 import { useFinancialData } from './FinancialDataContext';
 
 const STATUS_COLORS: Record<string, { bg: string; text: string; label: string }> = {
@@ -169,7 +170,7 @@ export default function CobrancasTab() {
         refreshing={refreshing}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={styles.emptyIcon}>💳</Text>
+            <MdiCash size={48} color="#D1D5DB" />
             <Text style={styles.emptyTitle}>Nenhuma cobranca encontrada</Text>
             <Text style={styles.emptySubtitle}>
               {selectedCar !== 'TODOS' || selectedStatus !== 'TODOS'

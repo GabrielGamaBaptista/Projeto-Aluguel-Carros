@@ -4,6 +4,7 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, Alert,
   ActivityIndicator, ScrollView, Image, Platform, Modal, KeyboardAvoidingView,
 } from 'react-native';
+import { Eye, AlertTriangle, CheckCircle2 } from 'lucide-react-native';
 import { tasksService, REQUIRED_PHOTO_ANGLES, PHOTO_ANGLE_LABELS } from '../services/tasksService';
 import { carsService } from '../services/carsService';
 import { authService } from '../services/authService';
@@ -103,7 +104,7 @@ const TaskDetailsScreen = ({ route, navigation }) => {
     if (!isLandlord) return null;
     return (
       <View style={styles.landlordBanner}>
-        <Text style={styles.landlordBannerIcon}>👁️</Text>
+        <Eye size={24} color="#4F46E5" style={{ marginRight: 12 }} />
         <View style={styles.landlordBannerContent}>
           <Text style={styles.landlordBannerTitle}>Modo Visualizacao</Text>
           <Text style={styles.landlordBannerText}>
@@ -121,7 +122,7 @@ const TaskDetailsScreen = ({ route, navigation }) => {
     return (
       <View style={[styles.dueDateCard, overdue && styles.dueDateCardOverdue]}>
         <Text style={[styles.dueDateLabel, overdue && styles.dueDateLabelOverdue]}>
-          {overdue ? '⚠️ Atrasada!' : '📅 Data Limite:'}
+          {overdue ? '⚠ Atrasada!' : 'Data Limite:'}
         </Text>
         <Text style={[styles.dueDateValue, overdue && styles.dueDateValueOverdue]}>
           {formatDate(task.dueDate)}
@@ -534,7 +535,7 @@ const TaskDetailsScreen = ({ route, navigation }) => {
     if (!task.revisionRequested || isCompleted) return null;
     return (
       <View style={styles.revisionBanner}>
-        <Text style={styles.revisionBannerIcon}>⚠️</Text>
+        <AlertTriangle size={24} color="#F59E0B" style={{ marginRight: 12 }} />
         <View style={styles.revisionBannerContent}>
           <Text style={styles.revisionBannerTitle}>Correcao Solicitada</Text>
           <Text style={styles.revisionBannerText}>
@@ -553,7 +554,7 @@ const TaskDetailsScreen = ({ route, navigation }) => {
     if (task.approved) {
       return (
         <View style={styles.approvedBanner}>
-          <Text style={styles.approvedBannerIcon}>✅</Text>
+          <CheckCircle2 size={22} color="#059669" style={{ marginRight: 10 }} />
           <Text style={styles.approvedBannerText}>Tarefa aprovada</Text>
         </View>
       );
@@ -714,7 +715,7 @@ const styles = StyleSheet.create({
   completedBadgeText: { color: '#065F46', fontSize: 12, fontWeight: '700' },
   // Landlord view-only banner
   landlordBanner: { flexDirection: 'row', backgroundColor: '#EEF2FF', padding: 16, marginHorizontal: 16, marginTop: 16, borderRadius: 12, borderWidth: 1, borderColor: '#C7D2FE' },
-  landlordBannerIcon: { fontSize: 24, marginRight: 12 },
+  landlordBannerIcon: { marginRight: 12 },
   landlordBannerContent: { flex: 1 },
   landlordBannerTitle: { fontSize: 15, fontWeight: 'bold', color: '#4F46E5', marginBottom: 4 },
   landlordBannerText: { fontSize: 13, color: '#6366F1', lineHeight: 18 },
@@ -767,7 +768,7 @@ const styles = StyleSheet.create({
   removeMaintenancePhoto: { backgroundColor: '#FEE2E2', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
   // Revision banner
   revisionBanner: { flexDirection: 'row', backgroundColor: '#FEF3C7', padding: 16, marginHorizontal: 16, marginTop: 12, borderRadius: 12, borderWidth: 1, borderColor: '#FDE68A' },
-  revisionBannerIcon: { fontSize: 24, marginRight: 12 },
+  revisionBannerIcon: { marginRight: 12 },
   revisionBannerContent: { flex: 1 },
   revisionBannerTitle: { fontSize: 15, fontWeight: 'bold', color: '#92400E', marginBottom: 4 },
   revisionBannerText: { fontSize: 13, color: '#92400E', lineHeight: 18 },
@@ -793,7 +794,7 @@ const styles = StyleSheet.create({
   revisionModalSendBtnDisabled: { backgroundColor: '#FDE68A' },
   revisionModalSendText: { fontSize: 15, fontWeight: 'bold', color: '#fff' },
   approvedBanner: { flexDirection: 'row', backgroundColor: '#D1FAE5', padding: 16, marginHorizontal: 16, marginTop: 12, borderRadius: 12, alignItems: 'center' },
-  approvedBannerIcon: { fontSize: 22, marginRight: 10 },
+  approvedBannerIcon: { marginRight: 10 },
   approvedBannerText: { fontSize: 15, fontWeight: '700', color: '#065F46' },
   approvedBadge: { backgroundColor: '#D1FAE5', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, marginLeft: 8 },
   approvedBadgeText: { color: '#065F46', fontSize: 12, fontWeight: '700' },

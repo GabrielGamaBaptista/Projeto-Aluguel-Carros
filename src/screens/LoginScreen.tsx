@@ -4,6 +4,7 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, Alert,
   ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
+import { MdiCar } from '../components/icons/MdiIcons';
 import { authService } from '../services/authService';
 import { auth } from '../config/firebase';
 
@@ -57,7 +58,7 @@ const LoginScreen = ({ navigation }) => {
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
-          <Text style={styles.logo}>🚗</Text>
+          <MdiCar size={64} color="#4F46E5" />
           <Text style={styles.title}>Aluguel de Carros</Text>
           <Text style={styles.subtitle}>Faca login para continuar</Text>
         </View>

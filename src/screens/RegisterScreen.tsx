@@ -4,6 +4,7 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, Alert,
   ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
+import { Building2, User, ClipboardList } from 'lucide-react-native';
 import { authService } from '../services/authService';
 import PhotoPicker from '../components/PhotoPicker';
 import {
@@ -47,6 +48,9 @@ const RegisterScreen = ({ navigation }) => {
   const [cnhFrontPhoto, setCnhFrontPhoto] = useState('');
   const [cnhBackPhoto, setCnhBackPhoto] = useState('');
   const [residenceProofPhoto, setResidenceProofPhoto] = useState('');
+
+  // Foto de perfil (opcional)
+  const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
 
   const [errors, setErrors] = useState({});
   const setError = (f, m) => setErrors(p => ({ ...p, [f]: m }));
@@ -237,6 +241,7 @@ const RegisterScreen = ({ navigation }) => {
       cep: cep.replace(/\D/g, ''), street: sanitizeText(street), number: sanitizeText(number),
       complement: sanitizeText(complement), neighborhood: sanitizeText(neighborhood),
       city: sanitizeText(city), state, address: fullAddress,
+      profilePhoto: profilePhoto || null,
     };
     if (role === 'locatario') {
       userData.cnhNumber = cnhNumber.replace(/\D/g, '');
@@ -265,11 +270,11 @@ const RegisterScreen = ({ navigation }) => {
       <Text style={styles.stepTitle}>Tipo de Conta</Text>
       <Text style={styles.stepSubtitle}>Selecione como voce vai usar o app</Text>
       <TouchableOpacity style={[styles.roleCard, role === 'locador' && styles.roleCardActive]} onPress={() => setRole('locador')}>
-        <Text style={styles.roleIcon}>🏢</Text>
+        <Building2 size={36} color={role === 'locador' ? '#4F46E5' : '#6B7280'} style={{ marginRight: 16 }} />
         <View style={styles.roleInfo}><Text style={[styles.roleTitle, role === 'locador' && styles.roleTitleActive]}>Locador</Text><Text style={styles.roleDesc}>Gerencio veiculos e locatarios</Text></View>
       </TouchableOpacity>
       <TouchableOpacity style={[styles.roleCard, role === 'locatario' && styles.roleCardActive]} onPress={() => setRole('locatario')}>
-        <Text style={styles.roleIcon}>👤</Text>
+        <User size={36} color={role === 'locatario' ? '#4F46E5' : '#6B7280'} style={{ marginRight: 16 }} />
         <View style={styles.roleInfo}><Text style={[styles.roleTitle, role === 'locatario' && styles.roleTitleActive]}>Locatario</Text><Text style={styles.roleDesc}>Alugo veiculo e gerencio tarefas</Text></View>
       </TouchableOpacity>
     </View>
@@ -278,6 +283,11 @@ const RegisterScreen = ({ navigation }) => {
   const renderStep2 = () => (
     <View>
       <Text style={styles.stepTitle}>Dados Basicos</Text>
+      <PhotoPicker
+        label="Foto de Perfil (opcional)"
+        onPhotoSelected={setProfilePhoto}
+        currentPhotoUrl={profilePhoto}
+      />
       <View style={styles.field}><Text style={styles.label}>Nome Completo *</Text>
         <TextInput style={[styles.input, errors.name && styles.inputError]} placeholder="Seu nome completo" placeholderTextColor="#9CA3AF" value={name} onChangeText={(t) => { setName(t); clearError('name'); }} autoCapitalize="words" maxLength={100} /><ErrorText field="name" /></View>
       <View style={styles.field}><Text style={styles.label}>Email *</Text>
@@ -302,13 +312,21 @@ const RegisterScreen = ({ navigation }) => {
             <View style={styles.field}>
               <Text style={styles.label}>Tipo de Pessoa *</Text>
               <View style={styles.personTypeRow}>
-                {[{ key: 'pf', label: 'Pessoa Fisica', icon: '👤' }, { key: 'pj', label: 'Pessoa Juridica', icon: '🏢' }, { key: 'mei', label: 'MEI', icon: '📋' }].map(pt => (
-                  <TouchableOpacity key={pt.key} style={[styles.personTypeCard, personType === pt.key && styles.personTypeActive]}
-                    onPress={() => { setPersonType(pt.key); clearError('personType'); setCpf(''); setBirthDate(''); setCnpj(''); setCompanyName(''); }}>
-                    <Text style={styles.personTypeIcon}>{pt.icon}</Text>
-                    <Text style={[styles.personTypeLabel, personType === pt.key && styles.personTypeLabelActive]}>{pt.label}</Text>
-                  </TouchableOpacity>
-                ))}
+                {[{ key: 'pf', label: 'Pessoa Fisica' }, { key: 'pj', label: 'Pessoa Juridica' }, { key: 'mei', label: 'MEI' }].map(pt => {
+                  const isActive = personType === pt.key;
+                  const iconColor = isActive ? '#4F46E5' : '#6B7280';
+                  return (
+                    <TouchableOpacity key={pt.key} style={[styles.personTypeCard, isActive && styles.personTypeActive]}
+                      onPress={() => { setPersonType(pt.key); clearError('personType'); setCpf(''); setBirthDate(''); setCnpj(''); setCompanyName(''); }}>
+                      <View style={styles.personTypeIcon}>
+                        {pt.key === 'pf' && <User size={22} color={iconColor} />}
+                        {pt.key === 'pj' && <Building2 size={22} color={iconColor} />}
+                        {pt.key === 'mei' && <ClipboardList size={22} color={iconColor} />}
+                      </View>
+                      <Text style={[styles.personTypeLabel, isActive && styles.personTypeLabelActive]}>{pt.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
               <ErrorText field="personType" />
             </View>
@@ -470,7 +488,7 @@ const styles = StyleSheet.create({
   personTypeRow: { flexDirection: 'row', gap: 8 },
   personTypeCard: { flex: 1, padding: 14, borderRadius: 10, borderWidth: 2, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB', alignItems: 'center' },
   personTypeActive: { borderColor: '#4F46E5', backgroundColor: '#EEF2FF' },
-  personTypeIcon: { fontSize: 22, marginBottom: 4 },
+  personTypeIcon: { marginBottom: 4, alignItems: 'center' },
   personTypeLabel: { fontSize: 12, fontWeight: '600', color: '#6B7280', textAlign: 'center' },
   personTypeLabelActive: { color: '#4F46E5' },
   buttonsRow: { flexDirection: 'row', gap: 12, marginTop: 24 },

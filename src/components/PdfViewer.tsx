@@ -6,6 +6,7 @@ import {
   View, Text, Image, TouchableOpacity, StyleSheet, ScrollView,
   ActivityIndicator, Modal, Dimensions, SafeAreaView,
 } from 'react-native';
+import { AlertTriangle } from 'lucide-react-native';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const PAGE_WIDTH = SCREEN_WIDTH - 32; // margem lateral
@@ -95,7 +96,7 @@ const PdfViewer = ({ visible, pdfUrl, title, onClose }) => {
           </View>
         ) : pages.length === 0 ? (
           <View style={styles.loadingContainer}>
-            <Text style={styles.errorIcon}>⚠️</Text>
+            <AlertTriangle size={36} color="#F59E0B" />
             <Text style={styles.errorText}>Nao foi possivel carregar o documento</Text>
           </View>
         ) : (

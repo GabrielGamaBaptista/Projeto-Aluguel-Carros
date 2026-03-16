@@ -8,6 +8,7 @@ import {
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
+import { Bell, Camera, Battery } from 'lucide-react-native';
 import { permissionService } from '../services/permissionService';
 
 interface Props {
@@ -40,7 +41,7 @@ const PermissionsScreen = ({ onComplete }: Props) => {
         </Text>
 
         <View style={styles.card}>
-          <Text style={styles.cardIcon}>🔔</Text>
+          <Bell size={28} color="#4F46E5" style={{ marginRight: 14, marginTop: 2 }} />
           <View style={styles.cardText}>
             <Text style={styles.cardTitle}>Notificacoes</Text>
             <Text style={styles.cardDesc}>
@@ -50,7 +51,7 @@ const PermissionsScreen = ({ onComplete }: Props) => {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardIcon}>📷</Text>
+          <Camera size={28} color="#4F46E5" style={{ marginRight: 14, marginTop: 2 }} />
           <View style={styles.cardText}>
             <Text style={styles.cardTitle}>Camera</Text>
             <Text style={styles.cardDesc}>
@@ -60,7 +61,7 @@ const PermissionsScreen = ({ onComplete }: Props) => {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardIcon}>🔋</Text>
+          <Battery size={28} color="#4F46E5" style={{ marginRight: 14, marginTop: 2 }} />
           <View style={styles.cardText}>
             <Text style={styles.cardTitle}>Otimizacao de Bateria</Text>
             <Text style={styles.cardDesc}>

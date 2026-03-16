@@ -7,6 +7,7 @@ import {
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { pick, types } from '@react-native-documents/picker';
 import { uploadImageToCloudinary, uploadFileToCloudinary, getPdfPreviewUrl, getPdfFullUrl } from '../config/cloudinary';
+import { Paperclip, FileText, Image as ImageIcon } from 'lucide-react-native';
 import PdfViewer from './PdfViewer';
 
 const DocumentPicker = ({ onDocumentSelected, label, currentDocument }) => {
@@ -132,9 +133,12 @@ const DocumentPicker = ({ onDocumentSelected, label, currentDocument }) => {
 
           {/* Nome do arquivo */}
           <View style={styles.docInfo}>
-            <Text style={styles.docName} numberOfLines={1}>
-              {doc.type === 'pdf' ? '📄 ' : '📷 '}{doc.name}
-            </Text>
+            <View style={styles.docNameRow}>
+              {doc.type === 'pdf'
+                ? <FileText size={14} color="#6B7280" />
+                : <ImageIcon size={14} color="#6B7280" />}
+              <Text style={styles.docName} numberOfLines={1}> {doc.name}</Text>
+            </View>
           </View>
 
           {/* Acoes */}
@@ -156,7 +160,7 @@ const DocumentPicker = ({ onDocumentSelected, label, currentDocument }) => {
             </View>
           ) : (
             <View style={styles.placeholder}>
-              <Text style={styles.placeholderIcon}>📎</Text>
+              <Paperclip size={32} color="#6B7280" />
               <Text style={styles.placeholderText}>{label || 'Anexar Documento'}</Text>
               <Text style={styles.placeholderHint}>PDF ou Foto</Text>
             </View>
@@ -199,7 +203,8 @@ const styles = StyleSheet.create({
   },
   pdfBadgeText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
   docInfo: { padding: 10, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
-  docName: { fontSize: 13, fontWeight: '600', color: '#374151' },
+  docNameRow: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  docName: { fontSize: 13, fontWeight: '600', color: '#374151', flex: 1 },
   docActions: { flexDirection: 'row' },
   viewBtn: { flex: 1, padding: 12, alignItems: 'center', borderRightWidth: 1, borderRightColor: '#E5E7EB' },
   viewBtnText: { fontSize: 14, fontWeight: '600', color: '#4F46E5' },

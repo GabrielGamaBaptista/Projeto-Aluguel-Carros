@@ -4,6 +4,8 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
   Alert, ActivityIndicator, FlatList, Modal, RefreshControl, KeyboardAvoidingView, Platform,
 } from 'react-native';
+import { Megaphone } from 'lucide-react-native';
+import { MdiPin } from '../components/icons/MdiIcons';
 import { authService } from '../services/authService';
 import { muralService, MURAL_CATEGORIES } from '../services/muralService';
 import { carsService } from '../services/carsService';
@@ -152,7 +154,12 @@ const MuralManagerScreen = ({ navigation }) => {
     <View style={styles.postCard}>
       <View style={styles.postHeader}>
         <View style={styles.postMeta}>
-          {item.pinned && <Text style={styles.pinnedBadge}>📌 Fixado</Text>}
+          {item.pinned && (
+            <View style={styles.pinnedBadge}>
+              <MdiPin size={12} color="#B45309" />
+              <Text style={styles.pinnedBadgeText}> Fixado</Text>
+            </View>
+          )}
           <Text style={styles.categoryBadge}>{getCategoryLabel(item.category)}</Text>
           <Text style={styles.targetBadge}>
             {item.targetType === 'all' ? 'Todos' : 'Especifico'}
@@ -198,7 +205,7 @@ const MuralManagerScreen = ({ navigation }) => {
         contentContainerStyle={styles.list}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>📋</Text>
+            <Megaphone size={48} color="#D1D5DB" />
             <Text style={styles.emptyTitle}>Nenhum post no mural</Text>
             <Text style={styles.emptySubtitle}>Crie posts para informar seus locatarios</Text>
           </View>
@@ -280,7 +287,10 @@ const MuralManagerScreen = ({ navigation }) => {
 
               <TouchableOpacity style={[styles.pinToggle, pinned && styles.pinToggleActive]}
                 onPress={() => setPinned(!pinned)}>
-                <Text style={styles.pinToggleText}>{pinned ? '📌 Fixado no topo' : 'Fixar no topo?'}</Text>
+                <View style={styles.pinToggleContent}>
+                  <MdiPin size={16} color={pinned ? '#B45309' : '#9CA3AF'} />
+                  <Text style={[styles.pinToggleText, pinned && { color: '#B45309' }]}> {pinned ? 'Fixado no topo' : 'Fixar no topo?'}</Text>
+                </View>
               </TouchableOpacity>
 
               <TouchableOpacity style={[styles.saveButton, saving && styles.buttonDisabled]}
@@ -313,7 +323,8 @@ const styles = StyleSheet.create({
   postCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 12, elevation: 2 },
   postHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
   postMeta: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
-  pinnedBadge: { fontSize: 12, color: '#B45309', fontWeight: '700' },
+  pinnedBadge: { flexDirection: 'row', alignItems: 'center' },
+  pinnedBadgeText: { fontSize: 12, color: '#B45309', fontWeight: '700' },
   categoryBadge: { backgroundColor: '#EEF2FF', color: '#4F46E5', fontSize: 11, fontWeight: '700', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, overflow: 'hidden' },
   targetBadge: { backgroundColor: '#F3F4F6', color: '#6B7280', fontSize: 11, fontWeight: '600', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, overflow: 'hidden' },
   postDate: { fontSize: 12, color: '#9CA3AF' },
@@ -325,7 +336,8 @@ const styles = StyleSheet.create({
   deleteBtn: { paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#FEF2F2', borderRadius: 6 },
   deleteBtnText: { color: '#DC2626', fontWeight: '600', fontSize: 13 },
   emptyContainer: { alignItems: 'center', paddingVertical: 60 },
-  emptyIcon: { fontSize: 48, marginBottom: 12 },
+  emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60, gap: 12 },
+  pinToggleContent: { flexDirection: 'row', alignItems: 'center' },
   emptyTitle: { fontSize: 18, fontWeight: 'bold', color: '#1F2937', marginBottom: 4 },
   emptySubtitle: { fontSize: 14, color: '#6B7280' },
   // Modal

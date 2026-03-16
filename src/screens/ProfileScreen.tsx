@@ -2,10 +2,12 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, Alert,
-  ActivityIndicator, ScrollView, SafeAreaView,
+  ActivityIndicator, ScrollView, SafeAreaView, Image,
 } from 'react-native';
+import { Lock, LogOut } from 'lucide-react-native';
 import { authService } from '../services/authService';
 import { auth, firestore } from '../config/firebase';
+import PhotoPicker from '../components/PhotoPicker';
 
 const ProfileScreen = ({ navigation }) => {
   const [userProfile, setUserProfile] = useState(null);
@@ -14,6 +16,7 @@ const ProfileScreen = ({ navigation }) => {
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
 
   useEffect(() => { loadProfile(); }, []);
   useEffect(() => {
@@ -25,7 +28,7 @@ const ProfileScreen = ({ navigation }) => {
     const user = authService.getCurrentUser();
     if (user) {
       const result = await authService.getCurrentUserProfile(user.uid);
-      if (result.success) { setUserProfile(result.data); setName(result.data.name || ''); setPhone(fmtPhone(result.data.phone || '')); }
+      if (result.success) { setUserProfile(result.data); setName(result.data.name || ''); setPhone(fmtPhone(result.data.phone || '')); setProfilePhoto(result.data.profilePhoto || null); }
     }
     setLoading(false);
   };
@@ -58,8 +61,8 @@ const ProfileScreen = ({ navigation }) => {
     setSaving(true);
     try {
       const user = authService.getCurrentUser();
-      await firestore().collection('users').doc(user.uid).update({ name: name.trim(), phone: phone.replace(/\D/g, '') });
-      setUserProfile(p => ({ ...p, name: name.trim(), phone: phone.replace(/\D/g, '') }));
+      await firestore().collection('users').doc(user.uid).update({ name: name.trim(), phone: phone.replace(/\D/g, ''), profilePhoto: profilePhoto || null });
+      setUserProfile(p => ({ ...p, name: name.trim(), phone: phone.replace(/\D/g, ''), profilePhoto: profilePhoto || null }));
       setEditing(false);
       Alert.alert('Sucesso', 'Perfil atualizado!');
     } catch (e) { Alert.alert('Erro', 'Nao foi possivel salvar.'); }
@@ -104,7 +107,11 @@ const ProfileScreen = ({ navigation }) => {
     <SafeAreaView style={styles.container}>
       <ScrollView>
         <View style={styles.header}>
-          <View style={styles.avatar}><Text style={styles.avatarText}>{userProfile.name?.charAt(0)?.toUpperCase() || '?'}</Text></View>
+          {profilePhoto ? (
+            <Image source={{ uri: profilePhoto }} style={styles.avatarImage} />
+          ) : (
+            <View style={styles.avatar}><Text style={styles.avatarText}>{userProfile.name?.charAt(0)?.toUpperCase() || '?'}</Text></View>
+          )}
           <Text style={styles.headerName}>{userProfile.name}</Text>
           <Text style={styles.headerRole}>{isLandlord ? 'Locador' : 'Locatario'}</Text>
           {userProfile.emailVerified && <View style={styles.verifiedBadge}><Text style={styles.verifiedText}>✓ Email verificado</Text></View>}
@@ -127,6 +134,11 @@ const ProfileScreen = ({ navigation }) => {
           </View>
           {editing ? (
             <>
+              <PhotoPicker
+                label="Foto de Perfil (opcional)"
+                onPhotoSelected={setProfilePhoto}
+                currentPhotoUrl={profilePhoto}
+              />
               <View style={styles.fieldContainer}><Text style={styles.fieldLabel}>Nome</Text>
                 <TextInput style={styles.input} placeholderTextColor="#9CA3AF" value={name} onChangeText={setName} /></View>
               <View style={styles.fieldContainer}><Text style={styles.fieldLabel}>Celular</Text>
@@ -177,13 +189,13 @@ const ProfileScreen = ({ navigation }) => {
           <Text style={styles.sectionTitle}>Seguranca</Text>
           {!isGoogle && (
             <TouchableOpacity style={styles.actionRow} onPress={handleResetPassword}>
-              <Text style={styles.actionIcon}>🔒</Text>
+              <Lock size={22} color="#374151" style={{ marginRight: 14 }} />
               <View style={styles.actionContent}><Text style={styles.actionTitle}>Alterar Senha</Text><Text style={styles.actionDesc}>Enviaremos um link para seu email</Text></View>
               <Text style={styles.actionArrow}>→</Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity style={[styles.actionRow, styles.logoutRow]} onPress={handleLogout}>
-            <Text style={styles.actionIcon}>🚪</Text>
+            <LogOut size={22} color="#DC2626" style={{ marginRight: 14 }} />
             <View style={styles.actionContent}><Text style={[styles.actionTitle, styles.logoutTitle]}>Sair da Conta</Text></View>
             <Text style={[styles.actionArrow, styles.logoutTitle]}>→</Text>
           </TouchableOpacity>
@@ -200,6 +212,7 @@ const styles = StyleSheet.create({
   header: { backgroundColor: '#4F46E5', padding: 32, paddingTop: 48, alignItems: 'center' },
   avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
   avatarText: { fontSize: 36, fontWeight: 'bold', color: '#4F46E5' },
+  avatarImage: { width: 80, height: 80, borderRadius: 40, marginBottom: 12 },
   headerName: { fontSize: 22, fontWeight: 'bold', color: '#fff', marginBottom: 4 },
   headerRole: { fontSize: 14, color: '#C7D2FE' },
   verifiedBadge: { backgroundColor: '#D1FAE5', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, marginTop: 10 },

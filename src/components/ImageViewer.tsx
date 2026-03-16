@@ -6,6 +6,7 @@ import {
   ScrollView, Dimensions, SafeAreaView, Share, Alert,
   ActivityIndicator, PermissionsAndroid, Platform,
 } from 'react-native';
+import { AlertTriangle } from 'lucide-react-native';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -76,7 +77,7 @@ const ImageViewer = ({ visible, imageUrl, title, onClose }) => {
           )}
           {imageError ? (
             <View style={styles.errorContainer}>
-              <Text style={styles.errorIcon}>⚠️</Text>
+              <AlertTriangle size={36} color="#F59E0B" />
               <Text style={styles.errorText}>Erro ao carregar imagem</Text>
             </View>
           ) : (

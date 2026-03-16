@@ -3,6 +3,7 @@ import {
   View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Alert,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { AlertTriangle, FileText } from 'lucide-react-native';
 import { useFinancialData } from './FinancialDataContext';
 
 const FREQUENCY_LABELS: Record<string, string> = {
@@ -98,7 +99,7 @@ export default function ContratosTab() {
             `${item.lastRecurringError}\n\n${item.lastRecurringErrorAt ? `Ocorrido em: ${formatDate(item.lastRecurringErrorAt?.toDate?.()?.toISOString?.()?.split('T')[0] || '')}` : ''}`,
           )}
         >
-          <Text style={styles.errorIcon}>⚠️</Text>
+          <AlertTriangle size={14} color="#F59E0B" style={{ marginRight: 6 }} />
           <Text style={styles.errorRowText}>Erro na cobranca automatica — toque para ver</Text>
         </TouchableOpacity>
       ) : null}
@@ -124,7 +125,7 @@ export default function ContratosTab() {
       refreshing={refreshing}
       ListEmptyComponent={
         <View style={styles.empty}>
-          <Text style={styles.emptyIcon}>📄</Text>
+          <FileText size={48} color="#D1D5DB" />
           <Text style={styles.emptyTitle}>Nenhum contrato encontrado</Text>
           <Text style={styles.emptySubtitle}>Configure o pagamento em um carro com locatario atribuido</Text>
         </View>
