@@ -2,12 +2,16 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, Image, TouchableOpacity, StyleSheet, ScrollView,
-  Alert, ActivityIndicator, TextInput, Modal, Linking, KeyboardAvoidingView, Platform,
+  Alert, ActivityIndicator, TextInput, Modal, Linking, KeyboardAvoidingView, Platform, RefreshControl,
 } from 'react-native';
+import { Gauge, Camera, Droplets, Wrench, ClipboardList } from 'lucide-react-native';
+import { MdiCar } from '../components/icons/MdiIcons';
 import { authService } from '../services/authService';
 import { carsService } from '../services/carsService';
 import { tasksService, TASK_TYPES } from '../services/tasksService';
 import { usersService } from '../services/usersService';
+import expenseService from '../services/expenseService';
+import { EXPENSE_CATEGORIES, getSubcategoryLabel } from '../constants/expenseCategories';
 import { getPdfPreviewUrl, getPdfFullUrl } from '../config/cloudinary';
 import PdfViewer from '../components/PdfViewer';
 import ImageViewer from '../components/ImageViewer';
@@ -38,36 +42,54 @@ const CarDetailsScreen = ({ route, navigation }) => {
   const [dueDateText, setDueDateText] = useState('');
   const [pdfViewer, setPdfViewer] = useState({ visible: false, url: null, title: '' });
   const [imageViewer, setImageViewer] = useState({ visible: false, url: null, title: '' });
+  const [refreshing, setRefreshing] = useState(false);
+  const [recentExpenses, setRecentExpenses] = useState([]);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => { loadCarDetails(); });
     return unsubscribe;
   }, [navigation]);
 
-  const loadCarDetails = async () => {
-    setLoading(true);
-    const currentUser = authService.getCurrentUser();
-    if (currentUser) {
-      const profileResult = await authService.getCurrentUserProfile(currentUser.uid);
-      if (profileResult.success) setUserProfile(profileResult.data);
-    }
-
-    const carResult = await carsService.getCarById(carId);
-    if (carResult.success) {
-      setCar(carResult.data);
-      if (carResult.data.tenantId) {
-        const tenantResult = await usersService.getUserById(carResult.data.tenantId);
-        if (tenantResult.success) setTenantInfo(tenantResult.data);
-      } else {
-        setTenantInfo(null);
+  const loadCarDetails = async (isRefresh = false) => {
+    // Durante pull-to-refresh, nao chama setLoading para nao desmontar o ScrollView
+    if (!isRefresh) setLoading(true);
+    try {
+      const currentUser = authService.getCurrentUser();
+      if (currentUser && !userProfile) {
+        const profileResult = await authService.getCurrentUserProfile(currentUser.uid);
+        if (profileResult.success) setUserProfile(profileResult.data);
       }
-    }
 
-    const tasksResult = await tasksService.getCarTasks(carId, 'pending');
-    if (tasksResult.success) setTasks(tasksResult.data);
-    const completedResult = await tasksService.getCarTasks(carId, 'completed');
-    if (completedResult.success) setCompletedTasks(completedResult.data);
-    setLoading(false);
+      // Buscar carro e tarefas em paralelo
+      const [carResult, tasksResult, completedResult] = await Promise.all([
+        carsService.getCarById(carId),
+        tasksService.getCarTasks(carId, 'pending'),
+        tasksService.getCarTasks(carId, 'completed'),
+      ]);
+
+      if (carResult.success) {
+        setCar(carResult.data);
+        if (carResult.data.tenantId) {
+          const tenantResult = await usersService.getUserById(carResult.data.tenantId);
+          if (tenantResult.success) setTenantInfo(tenantResult.data);
+        } else {
+          setTenantInfo(null);
+        }
+      }
+      if (tasksResult.success) setTasks(tasksResult.data);
+      if (completedResult.success) setCompletedTasks(completedResult.data);
+
+      // Carregar despesas recentes (apenas locador)
+      if (userProfile?.role === 'locador') {
+        const expResult = await expenseService.getExpensesByCar(carId);
+        if (expResult.success) setRecentExpenses(expResult.data.slice(0, 5));
+      }
+    } catch (error) {
+      console.error('loadCarDetails error:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   };
 
   const handleDeleteCar = () => {
@@ -152,15 +174,28 @@ const CarDetailsScreen = ({ route, navigation }) => {
     );
   };
 
+  const onRefresh = () => { setRefreshing(true); loadCarDetails(true); };
+
   const formatDate = (timestamp) => {
     if (!timestamp || !timestamp.toDate) return 'N/A';
     try { return timestamp.toDate().toLocaleDateString('pt-BR'); } catch { return 'N/A'; }
   };
 
-  const getTaskIcon = (type) => {
+  const getTaskColor = (type) => {
     switch (type) {
-      case 'km_update': return '📍'; case 'photo_inspection': return '📸';
-      case 'oil_change': return '🛢'; case 'maintenance': return '🔧'; default: return '📋';
+      case 'km_update': return '#3B82F6'; case 'photo_inspection': return '#8B5CF6';
+      case 'oil_change': return '#F59E0B'; case 'maintenance': return '#059669'; default: return '#6B7280';
+    }
+  };
+
+  const getTaskIcon = (type, size = 18) => {
+    const color = getTaskColor(type);
+    switch (type) {
+      case 'km_update': return <Gauge size={size} color={color} />;
+      case 'photo_inspection': return <Camera size={size} color={color} />;
+      case 'oil_change': return <Droplets size={size} color={color} />;
+      case 'maintenance': return <Wrench size={size} color={color} />;
+      default: return <ClipboardList size={size} color={color} />;
     }
   };
 
@@ -196,11 +231,11 @@ const CarDetailsScreen = ({ route, navigation }) => {
       style={styles.keyboardAvoid}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
       {car.photo ? (
         <Image source={{ uri: car.photo }} style={styles.carPhoto} />
       ) : (
-        <View style={styles.noPhoto}><Text style={styles.noPhotoText}>🚗</Text></View>
+        <View style={styles.noPhoto}><MdiCar size={80} color="#9CA3AF" /></View>
       )}
 
       <View style={styles.content}>
@@ -272,9 +307,13 @@ const CarDetailsScreen = ({ route, navigation }) => {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Locatario</Text>
             <View style={styles.tenantCard}>
-              <View style={styles.tenantAvatar}>
-                <Text style={styles.tenantAvatarText}>{tenantInfo.name?.charAt(0)?.toUpperCase()}</Text>
-              </View>
+              {tenantInfo.profilePhoto ? (
+                <Image source={{ uri: tenantInfo.profilePhoto }} style={styles.tenantAvatarImage} />
+              ) : (
+                <View style={styles.tenantAvatar}>
+                  <Text style={styles.tenantAvatarText}>{tenantInfo.name?.charAt(0)?.toUpperCase()}</Text>
+                </View>
+              )}
               <View style={styles.tenantMainInfo}>
                 <Text style={styles.tenantName}>{tenantInfo.name}</Text>
                 <Text style={styles.tenantEmail}>{tenantInfo.email}</Text>
@@ -298,9 +337,11 @@ const CarDetailsScreen = ({ route, navigation }) => {
             <TouchableOpacity style={styles.actionButton} onPress={() => navigation.navigate('EditCar', { carId: car.id })}>
               <Text style={styles.actionButtonText}>Editar Carro</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionButton} onPress={() => navigation.navigate('AssignTenant', { carId: car.id })}>
-              <Text style={styles.actionButtonText}>{car.tenantId ? 'Alterar Locatario' : 'Atribuir Locatario'}</Text>
-            </TouchableOpacity>
+            {!car.tenantId && (
+              <TouchableOpacity style={styles.actionButton} onPress={() => navigation.navigate('AssignTenant', { carId: car.id })}>
+                <Text style={styles.actionButtonText}>Atribuir Locatario</Text>
+              </TouchableOpacity>
+            )}
             {car.tenantId && (
               <TouchableOpacity style={[styles.actionButton, styles.removeTenantButton]} onPress={handleRemoveTenant}>
                 <Text style={styles.removeTenantText}>Remover Locatario</Text>
@@ -323,6 +364,45 @@ const CarDetailsScreen = ({ route, navigation }) => {
                 <Text style={styles.actionButtonText}>Cobranças</Text>
               </TouchableOpacity>
             )}
+            <TouchableOpacity style={[styles.actionButton, styles.historyButton]}
+              onPress={() => navigation.navigate('VehicleHistory', { carId: car.id, carLabel: `${car.brand || ''} ${car.model || ''} (${car.plate || 'S/P'})`.trim() })}>
+              <Text style={styles.actionButtonText}>Historico do Veiculo</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.actionButton, styles.expenseButton]}
+              onPress={() => navigation.navigate('AddExpense', {
+                carId: car.id,
+                carInfo: `${car.brand} ${car.model} (${car.plate})`,
+                tenantId: car.tenantId,
+                landlordId: car.landlordId,
+              })}>
+              <Text style={styles.actionButtonText}>Lancar Despesa</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Despesas Recentes (locador) */}
+        {isLandlord && recentExpenses.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Despesas Recentes</Text>
+            {recentExpenses.map((exp: any) => {
+              const catInfo = EXPENSE_CATEGORIES[exp.category as keyof typeof EXPENSE_CATEGORIES];
+              return (
+                <TouchableOpacity key={exp.id} style={[styles.expenseItem, { borderLeftColor: catInfo?.color || '#6B7280' }]}
+                  onPress={() => navigation.navigate('AddExpense', {
+                    carId: car.id,
+                    carInfo: `${car.brand} ${car.model} (${car.plate})`,
+                    tenantId: car.tenantId,
+                    landlordId: car.landlordId,
+                    expense: exp,
+                  })}>
+                  <View style={styles.expenseItemInfo}>
+                    <Text style={styles.expenseItemCategory}>{catInfo?.label || exp.category}{exp.subcategory ? ` - ${getSubcategoryLabel(exp.category, exp.subcategory)}` : ''}</Text>
+                    <Text style={styles.expenseItemDate}>{exp.date ? exp.date.split('-').reverse().join('/') : ''}</Text>
+                  </View>
+                  <Text style={styles.expenseItemAmount}>R$ {exp.amount?.toFixed(2)}</Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         )}
 
@@ -331,6 +411,10 @@ const CarDetailsScreen = ({ route, navigation }) => {
           <View style={styles.actionsSection}>
             <TouchableOpacity style={[styles.actionButton, styles.maintenanceButton]} onPress={() => setShowMaintenanceModal(true)}>
               <Text style={styles.actionButtonText}>Solicitar Manutencao</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.actionButton, styles.historyButton]}
+              onPress={() => navigation.navigate('VehicleHistory', { carId: car.id, carLabel: `${car.brand || ''} ${car.model || ''} (${car.plate || 'S/P'})`.trim() })}>
+              <Text style={styles.actionButtonText}>Historico do Veiculo</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -343,8 +427,11 @@ const CarDetailsScreen = ({ route, navigation }) => {
           ) : tasks.map((task) => (
             <TouchableOpacity key={task.id} style={styles.taskItem}
               onPress={() => navigation.navigate('TaskDetails', { taskId: task.id, carId: task.carId })}>
-              <Text style={styles.taskTitle}>{getTaskIcon(task.type)} {task.title}</Text>
-              <Text style={styles.taskArrow}>></Text>
+              <View style={styles.taskTitleRow}>
+                {getTaskIcon(task.type)}
+                <Text style={styles.taskTitle}>{task.title}</Text>
+              </View>
+              <Text style={styles.taskArrow}>{'>'}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -360,11 +447,14 @@ const CarDetailsScreen = ({ route, navigation }) => {
             {showCompletedTasks && completedTasks.map((task) => (
               <TouchableOpacity key={task.id} style={[styles.taskItem, styles.completedTaskItem]}
                 onPress={() => navigation.navigate('TaskDetails', { taskId: task.id, carId: task.carId })}>
-                <View>
-                  <Text style={styles.taskTitle}>{getTaskIcon(task.type)} {task.title}</Text>
+                <View style={{ flex: 1 }}>
+                  <View style={styles.taskTitleRow}>
+                    {getTaskIcon(task.type)}
+                    <Text style={styles.taskTitle}>{task.title}</Text>
+                  </View>
                   <Text style={styles.completedDate}>{formatDate(task.completedAt)}</Text>
                 </View>
-                <Text style={styles.taskArrow}>></Text>
+                <Text style={styles.taskArrow}>{'>'}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -422,19 +512,19 @@ const CarDetailsScreen = ({ route, navigation }) => {
                 value={taskDesc} onChangeText={setTaskDesc} multiline />
             </View>
             <TouchableOpacity style={styles.taskOptionButton} onPress={() => handleRequestTask(TASK_TYPES.KM_UPDATE)}>
-              <Text style={styles.taskOptionIcon}>📍</Text>
+              <View style={[styles.taskOptionIconWrap, { backgroundColor: '#3B82F620' }]}><Gauge size={24} color="#3B82F6" /></View>
               <View style={styles.taskOptionInfo}><Text style={styles.taskOptionTitle}>Atualizacao de KM</Text><Text style={styles.taskOptionDesc}>Locatario envia KM + foto do painel</Text></View>
             </TouchableOpacity>
             <TouchableOpacity style={styles.taskOptionButton} onPress={() => handleRequestTask(TASK_TYPES.PHOTO_INSPECTION)}>
-              <Text style={styles.taskOptionIcon}>📸</Text>
+              <View style={[styles.taskOptionIconWrap, { backgroundColor: '#8B5CF620' }]}><Camera size={24} color="#8B5CF6" /></View>
               <View style={styles.taskOptionInfo}><Text style={styles.taskOptionTitle}>Revisao Fotografica</Text><Text style={styles.taskOptionDesc}>9 angulos com 1+ foto cada</Text></View>
             </TouchableOpacity>
             <TouchableOpacity style={styles.taskOptionButton} onPress={() => handleRequestTask(TASK_TYPES.OIL_CHANGE)}>
-              <Text style={styles.taskOptionIcon}>🛢</Text>
+              <View style={[styles.taskOptionIconWrap, { backgroundColor: '#F59E0B20' }]}><Droplets size={24} color="#F59E0B" /></View>
               <View style={styles.taskOptionInfo}><Text style={styles.taskOptionTitle}>Troca de Oleo</Text><Text style={styles.taskOptionDesc}>KM + foto do adesivo + recibo</Text></View>
             </TouchableOpacity>
             <TouchableOpacity style={styles.taskOptionButton} onPress={() => handleRequestTask(TASK_TYPES.MAINTENANCE)}>
-              <Text style={styles.taskOptionIcon}>🔧</Text>
+              <View style={[styles.taskOptionIconWrap, { backgroundColor: '#05966920' }]}><Wrench size={24} color="#059669" /></View>
               <View style={styles.taskOptionInfo}><Text style={styles.taskOptionTitle}>Manutencao</Text><Text style={styles.taskOptionDesc}>Locatario registra manutencao</Text></View>
             </TouchableOpacity>
             <TouchableOpacity style={styles.modalCancelButton} onPress={() => { setShowTaskModal(false); setTaskDesc(''); setDueDateText(''); }}>
@@ -520,6 +610,7 @@ const styles = StyleSheet.create({
   tenantCard: { backgroundColor: '#fff', padding: 16, borderRadius: 12, flexDirection: 'row', alignItems: 'center' },
   tenantAvatar: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#EEF2FF', justifyContent: 'center', alignItems: 'center', marginRight: 14 },
   tenantAvatarText: { fontSize: 22, fontWeight: 'bold', color: '#4F46E5' },
+  tenantAvatarImage: { width: 50, height: 50, borderRadius: 25, marginRight: 14 },
   tenantMainInfo: { flex: 1 },
   tenantName: { fontSize: 16, fontWeight: 'bold', color: '#1F2937', marginBottom: 2 },
   tenantEmail: { fontSize: 13, color: '#6B7280' },
@@ -536,10 +627,22 @@ const styles = StyleSheet.create({
   removeTenantText: { fontSize: 16, fontWeight: 'bold', color: '#DC2626' },
   maintenanceButton: { backgroundColor: '#D97706' },
   financialButton: { backgroundColor: '#0F766E' },
+  historyButton: { backgroundColor: '#7C3AED' },
+  expenseButton: { backgroundColor: '#D97706' },
+  expenseItem: {
+    backgroundColor: '#fff', padding: 14, borderRadius: 12, marginBottom: 8,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    borderLeftWidth: 4,
+  },
+  expenseItemInfo: { flex: 1 },
+  expenseItemCategory: { fontSize: 14, fontWeight: '600', color: '#1F2937' },
+  expenseItemDate: { fontSize: 12, color: '#6B7280', marginTop: 2 },
+  expenseItemAmount: { fontSize: 16, fontWeight: 'bold', color: '#1F2937' },
   actionButtonText: { fontSize: 16, fontWeight: 'bold', color: '#fff' },
   emptyTasks: { backgroundColor: '#fff', padding: 20, borderRadius: 12, alignItems: 'center' },
   emptyTasksText: { fontSize: 14, color: '#6B7280' },
   taskItem: { backgroundColor: '#fff', padding: 16, borderRadius: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  taskTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
   completedTaskItem: { backgroundColor: '#F0FDF4' },
   taskTitle: { fontSize: 16, color: '#1F2937', fontWeight: '600' },
   completedDate: { fontSize: 12, color: '#6B7280', marginTop: 4 },
@@ -562,7 +665,7 @@ const styles = StyleSheet.create({
   inputHint: { fontSize: 12, color: '#6B7280', marginTop: 4 },
   textArea: { minHeight: 100, textAlignVertical: 'top' },
   taskOptionButton: { flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: '#F9FAFB', borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#E5E7EB' },
-  taskOptionIcon: { fontSize: 28, marginRight: 12 },
+  taskOptionIconWrap: { width: 44, height: 44, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   taskOptionInfo: { flex: 1 },
   taskOptionTitle: { fontSize: 16, fontWeight: 'bold', color: '#1F2937' },
   taskOptionDesc: { fontSize: 13, color: '#6B7280', marginTop: 2 },

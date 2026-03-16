@@ -5,6 +5,7 @@ import { FinancialDataProvider, useFinancialData } from '../components/financial
 import ResumoTab from '../components/financial/ResumoTab';
 import ContratosTab from '../components/financial/ContratosTab';
 import CobrancasTab from '../components/financial/CobrancasTab';
+import DespesasTab from '../components/financial/DespesasTab';
 
 const TopTab = createMaterialTopTabNavigator();
 
@@ -24,7 +25,7 @@ function FinancialTabs({ navigation }: { navigation: any }) {
         tabBarInactiveTintColor: '#9CA3AF',
         tabBarIndicatorStyle: { backgroundColor: '#4F46E5', height: 3 },
         tabBarStyle: { backgroundColor: '#fff', elevation: 2 },
-        tabBarLabelStyle: { fontWeight: '700', fontSize: 13, textTransform: 'none' },
+        tabBarLabelStyle: { fontWeight: '700', fontSize: 12, textTransform: 'none' },
         lazy: true,
       }}
     >
@@ -35,6 +36,7 @@ function FinancialTabs({ navigation }: { navigation: any }) {
         component={CobrancasTab}
         options={{ tabBarLabel: 'Cobranças' }}
       />
+      <TopTab.Screen name="Despesas" component={DespesasTab} />
     </TopTab.Navigator>
   );
 }

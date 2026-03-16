@@ -1,9 +1,13 @@
 import React, { createContext, useState, useCallback, useContext } from 'react';
 import paymentService from '../../services/paymentService';
+import expenseService from '../../services/expenseService';
+import { auth } from '../../config/firebase';
 
 interface FinancialDataContextType {
   charges: any[];
   contracts: any[];
+  expenses: any[];
+  customCategories: any[];
   loading: boolean;
   refreshing: boolean;
   error: string | null;
@@ -18,6 +22,8 @@ interface FinancialDataContextType {
 const FinancialDataContext = createContext<FinancialDataContextType>({
   charges: [],
   contracts: [],
+  expenses: [],
+  customCategories: [],
   loading: true,
   refreshing: false,
   error: null,
@@ -34,6 +40,8 @@ export const useFinancialData = () => useContext(FinancialDataContext);
 export const FinancialDataProvider = ({ children }: { children: React.ReactNode }) => {
   const [charges, setCharges] = useState<any[]>([]);
   const [contracts, setContracts] = useState<any[]>([]);
+  const [expenses, setExpenses] = useState<any[]>([]);
+  const [customCategories, setCustomCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,12 +58,17 @@ export const FinancialDataProvider = ({ children }: { children: React.ReactNode 
     try {
       setRefreshing(true);
       setError(null);
-      const [chargesData, contractsData] = await Promise.all([
+      const uid = auth().currentUser?.uid;
+      const [chargesData, contractsData, expensesResult, customCatsResult] = await Promise.all([
         paymentService.getAllChargesForLandlord(),
         paymentService.getAllContractsForLandlord(),
+        uid ? expenseService.getExpensesByLandlord(uid) : { success: true, data: [] },
+        uid ? expenseService.getCustomCategories(uid) : { success: true, data: [] },
       ]);
       setCharges(chargesData);
       setContracts(contractsData);
+      if (expensesResult.success && expensesResult.data) setExpenses(expensesResult.data);
+      if (customCatsResult.success && customCatsResult.data) setCustomCategories(customCatsResult.data);
     } catch (err: any) {
       console.error('Error loading financial data:', err);
       setError(err?.message || 'Falha ao carregar dados financeiros.');
@@ -67,7 +80,8 @@ export const FinancialDataProvider = ({ children }: { children: React.ReactNode 
 
   return (
     <FinancialDataContext.Provider value={{
-      charges, contracts, loading, refreshing, error,
+      charges, contracts, expenses, customCategories,
+      loading, refreshing, error,
       selectedCar, setSelectedCar,
       selectedStatus, setSelectedStatus,
       refresh, getNextPendingForContract,

@@ -5,6 +5,8 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ClipboardList, Megaphone, BarChart3, User } from 'lucide-react-native';
+import { MdiCar, MdiCash } from './src/components/icons/MdiIcons';
 import { authService } from './src/services/authService';
 import { notificationService } from './src/services/notificationService';
 import { permissionService } from './src/services/permissionService';
@@ -30,6 +32,8 @@ import TenantPaymentsScreen from './src/screens/TenantPaymentsScreen';
 import PaymentDetailsScreen from './src/screens/PaymentDetailsScreen';
 import FinancialDashboardScreen from './src/screens/FinancialDashboardScreen';
 import ContractDetailsScreen from './src/screens/ContractDetailsScreen';
+import VehicleHistoryScreen from './src/screens/VehicleHistoryScreen';
+import AddExpenseScreen from './src/screens/AddExpenseScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -48,23 +52,23 @@ function MainTabs({ userRole }) {
       tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
     }}>
       <Tab.Screen name="Home" component={HomeScreen}
-        options={{ tabBarLabel: 'Carros', tabBarIcon: ({ color }) => <Text style={{ fontSize: 24, color }}>🚗</Text> }} />
+        options={{ tabBarLabel: 'Carros', tabBarIcon: ({ color }) => <MdiCar size={22} color={color} /> }} />
       <Tab.Screen name="Tasks" component={TasksScreen}
-        options={{ tabBarLabel: 'Tarefas', tabBarIcon: ({ color }) => <Text style={{ fontSize: 24, color }}>📋</Text> }} />
+        options={{ tabBarLabel: 'Tarefas', tabBarIcon: ({ color }) => <ClipboardList size={22} color={color} /> }} />
       {userRole === 'locatario' && (
         <Tab.Screen name="TenantPayments" component={TenantPaymentsScreen}
-          options={{ tabBarLabel: 'Pagamentos', tabBarIcon: ({ color }) => <Text style={{ fontSize: 24, color }}>💳</Text> }} />
+          options={{ tabBarLabel: 'Pagamentos', tabBarIcon: ({ color }) => <MdiCash size={22} color={color} /> }} />
       )}
       {userRole === 'locador' && (
         <Tab.Screen name="Mural" component={MuralManagerScreen}
-          options={{ tabBarLabel: 'Mural', tabBarIcon: ({ color }) => <Text style={{ fontSize: 24, color }}>📢</Text> }} />
+          options={{ tabBarLabel: 'Mural', tabBarIcon: ({ color }) => <Megaphone size={22} color={color} /> }} />
       )}
       {userRole === 'locador' && (
         <Tab.Screen name="Financial" component={FinancialDashboardScreen}
-          options={{ tabBarLabel: 'Financeiro', tabBarIcon: ({ color }) => <Text style={{ fontSize: 24, color }}>💰</Text> }} />
+          options={{ tabBarLabel: 'Financeiro', tabBarIcon: ({ color }) => <BarChart3 size={22} color={color} /> }} />
       )}
       <Tab.Screen name="Profile" component={ProfileScreen}
-        options={{ tabBarLabel: 'Perfil', tabBarIcon: ({ color }) => <Text style={{ fontSize: 24, color }}>👤</Text> }} />
+        options={{ tabBarLabel: 'Perfil', tabBarIcon: ({ color }) => <User size={22} color={color} /> }} />
     </Tab.Navigator>
   );
 }
@@ -166,6 +170,8 @@ export default function App() {
             <Stack.Screen name="PaymentContract" component={PaymentContractScreen} options={{ headerShown: true, headerTitle: 'Configurar Pagamento', headerBackTitle: 'Voltar', headerTintColor: '#4F46E5' }} />
             <Stack.Screen name="Charges" component={ChargesScreen} options={{ headerShown: true, headerTitle: 'Cobranças', headerBackTitle: 'Voltar', headerTintColor: '#4F46E5' }} />
             <Stack.Screen name="PaymentDetails" component={PaymentDetailsScreen} options={{ headerShown: true, headerTitle: 'Detalhes do Pagamento', headerBackTitle: 'Voltar', headerTintColor: '#4F46E5' }} />
+            <Stack.Screen name="VehicleHistory" component={VehicleHistoryScreen} options={{ headerShown: true, headerTitle: 'Historico do Veiculo', headerBackTitle: 'Voltar', headerTintColor: '#4F46E5' }} />
+            <Stack.Screen name="AddExpense" component={AddExpenseScreen} options={{ headerShown: true, headerTitle: 'Lancar Despesa', headerBackTitle: 'Voltar', headerTintColor: '#4F46E5' }} />
           </>
         )}
       </Stack.Navigator>

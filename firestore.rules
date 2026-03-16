@@ -288,5 +288,43 @@ service cloud.firestore {
 
       allow write: if false;
     }
+
+    // ─── Despesas ───────────────────────────────────────────────────────
+    // Leitura e escrita: apenas o locador dono da despesa.
+    match /expenses/{expenseId} {
+      allow read: if request.auth != null
+        && resource.data.landlordId == request.auth.uid;
+
+      allow create: if request.auth != null
+        && request.resource.data.landlordId == request.auth.uid
+        && request.resource.data.amount is number
+        && request.resource.data.category in ['documentacao', 'manutencao', 'seguro'];
+
+      // landlordId, createdAt e carId sao imutaveis
+      allow update: if request.auth != null
+        && resource.data.landlordId == request.auth.uid
+        && request.resource.data.landlordId == resource.data.landlordId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.carId == resource.data.carId;
+
+      allow delete: if request.auth != null
+        && resource.data.landlordId == request.auth.uid;
+    }
+
+    // Categorias custom de despesas: apenas o locador dono.
+    // Sem update — categorias sao criadas e deletadas, nunca editadas.
+    match /customExpenseCategories/{docId} {
+      allow read: if request.auth != null
+        && resource.data.landlordId == request.auth.uid;
+
+      allow create: if request.auth != null
+        && request.resource.data.landlordId == request.auth.uid
+        && request.resource.data.parentCategory in ['documentacao', 'manutencao', 'seguro'];
+
+      allow update: if false;
+
+      allow delete: if request.auth != null
+        && resource.data.landlordId == request.auth.uid;
+    }
   }
 }
