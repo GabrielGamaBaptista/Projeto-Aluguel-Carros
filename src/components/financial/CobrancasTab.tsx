@@ -22,12 +22,12 @@ const BILLING_LABELS: Record<string, string> = {
   CREDIT_CARD: 'Cartao',
 };
 
-const STATUS_FILTER_OPTIONS = [
-  { key: 'TODOS', label: 'Todos' },
-  { key: 'PENDING', label: 'Pendente' },
-  { key: 'OVERDUE', label: 'Atrasado' },
-  { key: 'RECEIVED', label: 'Recebido' },
-  { key: 'CANCELLED', label: 'Cancelado' },
+const PERIOD_OPTIONS = [
+  { key: 'month', label: 'Mes Atual' },
+  { key: '3months', label: 'Trimestre' },
+  { key: '6months', label: 'Semestre' },
+  { key: 'year', label: 'Ano' },
+  { key: 'all', label: 'Todos' },
 ];
 
 const formatCurrency = (value: number) =>
@@ -39,18 +39,61 @@ const formatDate = (dateStr: string) => {
   return `${day}/${month}/${year}`;
 };
 
-const STATUS_ORDER: Record<string, number> = {
-  OVERDUE: 0,
-  PENDING: 1,
-  CONFIRMED: 2,
-  RECEIVED: 3,
-  REFUNDED: 4,
-  CANCELLED: 5,
+// Extrai ano e mes de uma string YYYY-MM-DD sem usar new Date() (evita bugs de timezone)
+const getYearMonth = (dateStr: string): { year: number; month: number } | null => {
+  if (!dateStr || dateStr.length < 7) return null;
+  const parts = dateStr.split('-');
+  if (parts.length < 2) return null;
+  const year = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10);
+  if (isNaN(year) || isNaN(month)) return null;
+  return { year, month };
+};
+
+const isDateInPeriod = (dateStr: string, period: string): boolean => {
+  if (period === 'all') return true;
+  const ym = getYearMonth(dateStr);
+  if (!ym) return false;
+  const now = new Date();
+  const nowYear = now.getFullYear();
+  const nowMonth = now.getMonth() + 1; // 1-based
+
+  switch (period) {
+    case 'month':
+      return ym.year === nowYear && ym.month === nowMonth;
+    case '3months': {
+      const threeAgoTotal = nowYear * 12 + nowMonth - 2;
+      const dateTotal = ym.year * 12 + ym.month;
+      return dateTotal >= threeAgoTotal && dateTotal <= nowYear * 12 + nowMonth;
+    }
+    case '6months': {
+      const sixAgoTotal = nowYear * 12 + nowMonth - 5;
+      const dateTotal = ym.year * 12 + ym.month;
+      return dateTotal >= sixAgoTotal && dateTotal <= nowYear * 12 + nowMonth;
+    }
+    case 'year':
+      return ym.year === nowYear && ym.month <= nowMonth;
+    default:
+      return true;
+  }
+};
+
+const getChargeOrder = (c: any): number => {
+  const isAvulsa = !c.contractId;
+  const s = c.status;
+  if (s === 'CANCELLED') return 6;
+  if (isAvulsa && s === 'OVERDUE') return 0;
+  if (isAvulsa && s === 'PENDING') return 1;
+  if (!isAvulsa && s === 'OVERDUE') return 2;
+  if (!isAvulsa && s === 'PENDING') return 3;
+  if (!isAvulsa && (s === 'RECEIVED' || s === 'CONFIRMED')) return 4;
+  if (isAvulsa && (s === 'RECEIVED' || s === 'CONFIRMED')) return 5;
+  return 7; // fallback (REFUNDED, etc.)
 };
 
 export default function CobrancasTab() {
   const navigation = useNavigation<any>();
-  const { charges, loading, refreshing, refresh, error, selectedCar, setSelectedCar, selectedStatus, setSelectedStatus } = useFinancialData();
+  const { charges, loading, refreshing, refresh, error, selectedCar, setSelectedCar, selectedPeriod, setSelectedPeriod } = useFinancialData();
 
   const carOptions = useMemo(() => {
     const unique = [...new Set(charges.map(c => c.carInfo).filter(Boolean))];
@@ -61,15 +104,15 @@ export default function CobrancasTab() {
     return charges
       .filter(c => {
         const carMatch = selectedCar === 'TODOS' || c.carInfo === selectedCar;
-        const statusMatch = selectedStatus === 'TODOS' || c.status === selectedStatus;
-        return carMatch && statusMatch;
+        const periodMatch = isDateInPeriod(c.dueDate, selectedPeriod);
+        return carMatch && periodMatch;
       })
       .sort((a, b) => {
-        const orderDiff = (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9);
+        const orderDiff = getChargeOrder(a) - getChargeOrder(b);
         if (orderDiff !== 0) return orderDiff;
         return (a.dueDate || '').localeCompare(b.dueDate || '');
       });
-  }, [charges, selectedCar, selectedStatus]);
+  }, [charges, selectedCar, selectedPeriod]);
 
   if (loading) {
     return (
@@ -146,16 +189,16 @@ export default function CobrancasTab() {
         </View>
       )}
 
-      {/* Filtro por status */}
+      {/* Filtro por periodo */}
       <View style={styles.filterSection}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
-          {STATUS_FILTER_OPTIONS.map(opt => (
+          {PERIOD_OPTIONS.map(opt => (
             <TouchableOpacity
               key={opt.key}
-              style={[styles.chip, selectedStatus === opt.key && styles.chipActive]}
-              onPress={() => setSelectedStatus(opt.key)}
+              style={[styles.chip, selectedPeriod === opt.key && styles.chipActive]}
+              onPress={() => setSelectedPeriod(opt.key)}
             >
-              <Text style={[styles.chipText, selectedStatus === opt.key && styles.chipTextActive]}>{opt.label}</Text>
+              <Text style={[styles.chipText, selectedPeriod === opt.key && styles.chipTextActive]}>{opt.label}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -173,7 +216,7 @@ export default function CobrancasTab() {
             <MdiCash size={48} color="#D1D5DB" />
             <Text style={styles.emptyTitle}>Nenhuma cobranca encontrada</Text>
             <Text style={styles.emptySubtitle}>
-              {selectedCar !== 'TODOS' || selectedStatus !== 'TODOS'
+              {selectedCar !== 'TODOS' || selectedPeriod !== 'all'
                 ? 'Tente mudar os filtros'
                 : 'As cobranças geradas aparecerao aqui'}
             </Text>

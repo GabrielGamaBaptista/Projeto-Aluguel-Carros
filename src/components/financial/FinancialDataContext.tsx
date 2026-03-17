@@ -13,8 +13,8 @@ interface FinancialDataContextType {
   error: string | null;
   selectedCar: string;
   setSelectedCar: (car: string) => void;
-  selectedStatus: string;
-  setSelectedStatus: (status: string) => void;
+  selectedPeriod: string;
+  setSelectedPeriod: (period: string) => void;
   refresh: () => Promise<void>;
   getNextPendingForContract: (contractId: string) => any | null;
 }
@@ -29,8 +29,8 @@ const FinancialDataContext = createContext<FinancialDataContextType>({
   error: null,
   selectedCar: 'TODOS',
   setSelectedCar: () => {},
-  selectedStatus: 'TODOS',
-  setSelectedStatus: () => {},
+  selectedPeriod: 'all',
+  setSelectedPeriod: () => {},
   refresh: async () => {},
   getNextPendingForContract: () => null,
 });
@@ -46,7 +46,7 @@ export const FinancialDataProvider = ({ children }: { children: React.ReactNode 
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedCar, setSelectedCar] = useState<string>('TODOS');
-  const [selectedStatus, setSelectedStatus] = useState<string>('TODOS');
+  const [selectedPeriod, setSelectedPeriod] = useState<string>('all');
 
   const getNextPendingForContract = useCallback((contractId: string) => {
     return charges
@@ -83,7 +83,7 @@ export const FinancialDataProvider = ({ children }: { children: React.ReactNode 
       charges, contracts, expenses, customCategories,
       loading, refreshing, error,
       selectedCar, setSelectedCar,
-      selectedStatus, setSelectedStatus,
+      selectedPeriod, setSelectedPeriod,
       refresh, getNextPendingForContract,
     }}>
       {children}

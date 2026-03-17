@@ -138,6 +138,20 @@ service cloud.firestore {
                 .affectedKeys()
                 .hasOnly(['status', 'approved', 'approvedAt', 'revisionRequested',
                           'revisionReason', 'revisionRequestedAt', 'completedAt']))
+
+        ||
+
+        // Locador: pode concluir tarefa de manutencao solicitada pelo locatario.
+        // Restricoes: apenas tipo maintenance, solicitada pelo locatario, nao aprovada.
+        // Campos permitidos: apenas dados de conclusao de manutencao (whitelist).
+        (carData(resource.data.carId).landlordId == request.auth.uid
+          && resource.data.type == 'maintenance'
+          && resource.data.requestedByRole == 'locatario'
+          && resource.data.get('approved', false) != true
+          && request.resource.data.diff(resource.data)
+                .affectedKeys()
+                .hasOnly(['status', 'completedAt', 'maintenanceNotes',
+                          'maintenanceCost', 'maintenancePhotos', 'maintenanceReceiptPhoto']))
       );
 
       allow delete: if request.auth != null
