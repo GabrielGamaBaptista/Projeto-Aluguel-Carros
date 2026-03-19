@@ -14,7 +14,7 @@ O app facilita o relacionamento locador ↔ locatário, onde:
 
 ### Plataforma
 - React Native CLI (sem Expo)
-- Android only (iOS não é alvo no momento)
+- Android (iOS em andamento)
 - Linguagem: JavaScript/TypeScript (telas em .tsx, serviços em .js)
 
 ### Pacotes principais (manter estas versões)
@@ -384,18 +384,42 @@ As regras estão em `firestore.rules` e seguem:
 
 ## FIRESTORE — QUERIES E ÍNDICES
 
-**IMPORTANTE**: Evitamos composite indexes sempre que possível. A estratégia é:
-- Queries com no máximo 2 campos `where()` de igualdade (não precisa de índice)
-- Se precisar de `orderBy`, fazemos a ordenação **client-side** (JavaScript `.sort()`)
-- Se precisar filtrar por 3+ campos, filtramos alguns **client-side** (ex: `.filter(u => u.role === 'locatario')`)
+### Estratégia de Índices
 
-Isso elimina a necessidade de criar índices compostos no Firebase Console, que causam erros de "permission denied" ou "index required" se esquecidos.
+Composite indexes são bem-vindos e recomendados quando melhoram a performance das queries. **Não evitar** — usar sempre que a query precisar. A única regra é: **documentar todo índice composto** neste arquivo e manter o `firestore.indexes.json` atualizado para que o deploy funcione em qualquer ambiente.
 
-**Índices compostos já necessários** (criados automaticamente pelo Firestore):
-- `tasks`: carId + status (usado em `getCarTasks`)
-- `tasks`: carId (in) + status (usado em `getAllUserTasks`)
+**Workflow para novos índices:**
+1. Criar a query no código normalmente (com `where`, `orderBy`, etc.)
+2. Se o Firestore pedir índice, o erro inclui link direto para criação
+3. Após criar, exportar: `firebase firestore:indexes > firestore.indexes.json`
+4. Commitar o `firestore.indexes.json` atualizado
+5. Documentar o índice na tabela abaixo
 
-Se o Firestore pedir um índice, o erro no console do app inclui um link direto para criação.
+**Deploy de índices** (em qualquer ambiente novo):
+```bash
+firebase deploy --only firestore:indexes
+```
+
+### Registro de Índices Compostos (13 ativos)
+
+| Coleção | Campos | Usado em |
+|---------|--------|----------|
+| `cars` | landlordId ↑ + createdAt ↓ | `getCarsByLandlord`, `subscribeToCars` |
+| `mural_posts` | landlordId ↑ + createdAt ↓ | `getPostsByLandlord` |
+| `mural_posts` | landlordId ↑ + targetType ↑ + createdAt ↓ | `getPostsForTenant` (posts gerais) |
+| `mural_posts` | targetTenantId ↑ + createdAt ↓ | `getPostsForTenant` (posts específicos) |
+| `tasks` | carId ↑ + status ↑ + completedAt ↑ | `getCarTasks` (completed, asc) |
+| `tasks` | carId ↑ + status ↑ + completedAt ↓ | `getCarTasks` (completed, desc) |
+| `tasks` | carId ↑ + status ↑ + createdAt ↓ | `getCarTasks` (por criação) |
+| `tasks` | carId ↑ + status ↑ + dueDate ↑ | `getCarTasks` (pending, por prazo) |
+| `tasks` | carId ↑ + type ↑ + status ↑ | `_hasPendingTask` |
+| `tasks` | status ↑ + dueDate ↑ | `notifyOverdueTasks` (cron) |
+| `tenantRequests` | carId ↑ + status ↑ | `getSentRequests` |
+| `tenantRequests` | carId ↑ + tenantId ↑ + status ↑ | `createContract` (validação) |
+| `tenantRequests` | tenantId ↑ + status ↑ + createdAt ↓ | `getPendingRequests` |
+
+> **Manter esta tabela e o `firestore.indexes.json` atualizados** ao criar novos índices.
+> Exportar: `firebase firestore:indexes > firestore.indexes.json`
 
 ---
 
@@ -698,11 +722,11 @@ Todas as validações client-side ficam em `src/utils/validation.js`:
 - `fetchAddressByCep(cep)` — busca ViaCEP, retorna `{ success, data: { street, neighborhood, city, state, complement } }` ou `{ success: false, error }`
 - `formatCep(text)` — formata "00000-000"
 
-### Queries Firestore — Cuidado com Índices
-- **Nunca** usar 3+ campos `where` em uma query
-- **Nunca** combinar `where` com `orderBy` em campos diferentes sem verificar se o índice existe
-- Preferir filtrar/ordenar client-side para evitar necessidade de índices compostos
-- Se precisar de índice, o Firestore logará o erro com link de criação
+### Queries Firestore — Índices
+- Usar composite indexes livremente quando a query precisar — são gratuitos e melhoram performance
+- Ao criar um novo índice: documentar na tabela em "FIRESTORE — QUERIES E ÍNDICES" e atualizar `firestore.indexes.json`
+- Deploy de índices: `firebase deploy --only firestore:indexes`
+- Ordenação com `orderBy` no Firestore é preferível a `.sort()` client-side quando possível (mais eficiente, menos dados transferidos)
 
 ---
 
@@ -732,20 +756,8 @@ Todas as validações client-side ficam em `src/utils/validation.js`:
 
 ## MELHORIAS PENDENTES
 
-### Média prioridade
-- [ ] Histórico de KM com gráfico
-
-### Baixa prioridade
 - [ ] Splash screen customizada
-- [ ] Pull-to-refresh na CarDetailsScreen
-- [ ] Ordenação/filtro de carros no HomeScreen (locador)
-- [ ] Notificação de tarefa atrasada ao locador
-
-### Para o futuro (planejado)
-- [ ] Regras Firestore mais restritivas (por role/ownership)
-- [ ] Relatórios financeiros exportáveis (PDF/Excel) para locador
-- [ ] Suporte iOS
-- [ ] Histórico de pagamentos no perfil do locatário
+- [ ] Suporte iOS (pipeline em andamento — ver PLANO-IOS.md)
 
 ---
 
