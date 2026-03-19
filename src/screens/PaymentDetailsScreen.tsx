@@ -407,9 +407,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   boletoButtonText: { color: '#fff', fontWeight: '600', fontSize: 15 },
-  infoRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  infoLabel: { fontSize: 14, color: '#6B7280' },
-  infoValue: { fontSize: 14, fontWeight: '600', color: '#1F2937' },
+  infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
+  infoLabel: { fontSize: 14, color: '#6B7280', flex: 1, marginRight: 8 },
+  infoValue: { fontSize: 14, fontWeight: '600', color: '#1F2937', flexShrink: 0, textAlign: 'right' },
   cancelButton: {
     backgroundColor: '#DC2626',
     borderRadius: 8,

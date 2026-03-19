@@ -1,6 +1,6 @@
 // src/screens/EmailVerificationScreen.tsx
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, SafeAreaView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, SafeAreaView, ScrollView } from 'react-native';
 import { Mail } from 'lucide-react-native';
 import { authService } from '../services/authService';
 
@@ -44,7 +44,7 @@ const EmailVerificationScreen = ({ onVerified }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
+      <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.iconC}><Mail size={48} color="#4F46E5" /></View>
         <Text style={styles.title}>Verifique seu Email</Text>
         <Text style={styles.subtitle}>Enviamos um link para:</Text>
@@ -66,14 +66,14 @@ const EmailVerificationScreen = ({ onVerified }) => {
         <TouchableOpacity style={styles.logout} onPress={() => authService.logout()}>
           <Text style={styles.logoutText}>Usar outro email / Sair</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
-  content: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
+  content: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
   iconC: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#EEF2FF', justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
   icon: { fontSize: 48 },
   title: { fontSize: 26, fontWeight: 'bold', color: '#1F2937', marginBottom: 8, textAlign: 'center' },

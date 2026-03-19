@@ -440,7 +440,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#D1D5DB', borderRadius: 8,
     padding: 12, fontSize: 15, color: '#1F2937', marginBottom: 12,
   },
-  row: { flexDirection: 'row', marginBottom: 12 },
+  row: { flexDirection: 'row', marginBottom: 12, flexWrap: 'wrap' },
   typeButton: {
     flex: 1, paddingVertical: 10, borderWidth: 1, borderColor: '#D1D5DB',
     borderRadius: 8, marginHorizontal: 3, alignItems: 'center',

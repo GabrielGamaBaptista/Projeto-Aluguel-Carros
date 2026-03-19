@@ -226,6 +226,8 @@ export default function ResumoTab() {
       {
         value: revVal,
         label: MONTH_LABELS[parseInt(month, 10) - 1],
+        labelWidth: 34,
+        labelTextStyle: { textAlign: 'center', color: '#6B7280', fontSize: 10 },
         frontColor: selectedBarIdx === revIdx ? '#3730A3' : '#4F46E5',
         spacing: 2,
         onPress: () => setSelectedBarIdx(prev => prev === revIdx ? null : revIdx),
@@ -302,32 +304,32 @@ export default function ResumoTab() {
       <View style={styles.cardsGrid}>
         <View style={[styles.summaryCard, styles.cardReceived]}>
           <Text style={styles.cardLabel}>Recebido</Text>
-          <Text style={[styles.cardValue, { color: '#059669' }]}>{formatCurrency(summary.totalReceived)}</Text>
+          <Text style={[styles.cardValue, { color: '#059669' }]} numberOfLines={1}>{formatCurrency(summary.totalReceived)}</Text>
           <Text style={styles.cardCount}>{summary.countReceived} cobranca{summary.countReceived !== 1 ? 's' : ''}</Text>
         </View>
         <View style={[styles.summaryCard, styles.cardPending]}>
           <Text style={styles.cardLabel}>Pendente</Text>
-          <Text style={[styles.cardValue, { color: '#6B7280' }]}>{formatCurrency(summary.totalPending)}</Text>
+          <Text style={[styles.cardValue, { color: '#6B7280' }]} numberOfLines={1}>{formatCurrency(summary.totalPending)}</Text>
           <Text style={styles.cardCount}>{summary.countPending} cobranca{summary.countPending !== 1 ? 's' : ''}</Text>
         </View>
         <View style={[styles.summaryCard, styles.cardOverdue]}>
           <Text style={styles.cardLabel}>Atrasado</Text>
-          <Text style={[styles.cardValue, { color: '#DC2626' }]}>{formatCurrency(summary.totalOverdue)}</Text>
+          <Text style={[styles.cardValue, { color: '#DC2626' }]} numberOfLines={1}>{formatCurrency(summary.totalOverdue)}</Text>
           <Text style={styles.cardCount}>{summary.countOverdue} cobranca{summary.countOverdue !== 1 ? 's' : ''}</Text>
         </View>
         <View style={[styles.summaryCard, styles.cardContracts]}>
           <Text style={styles.cardLabel}>Contratos Ativos</Text>
-          <Text style={[styles.cardValue, { color: '#4F46E5' }]}>{activeContracts}</Text>
+          <Text style={[styles.cardValue, { color: '#4F46E5' }]} numberOfLines={1}>{activeContracts}</Text>
           <Text style={styles.cardCount}>contrato{activeContracts !== 1 ? 's' : ''}</Text>
         </View>
         <View style={[styles.summaryCard, styles.cardExpenses]}>
           <Text style={styles.cardLabel}>Despesas</Text>
-          <Text style={[styles.cardValue, { color: '#D97706' }]}>{formatCurrency(totalExpenses)}</Text>
+          <Text style={[styles.cardValue, { color: '#D97706' }]} numberOfLines={1}>{formatCurrency(totalExpenses)}</Text>
           <Text style={styles.cardCount}>{filteredExpenses.length} despesa{filteredExpenses.length !== 1 ? 's' : ''}</Text>
         </View>
         <View style={[styles.summaryCard, lucroLiquido >= 0 ? styles.cardProfit : styles.cardLoss]}>
           <Text style={styles.cardLabel}>Lucro Liquido</Text>
-          <Text style={[styles.cardValue, { color: lucroLiquido >= 0 ? '#059669' : '#DC2626' }]}>
+          <Text style={[styles.cardValue, { color: lucroLiquido >= 0 ? '#059669' : '#DC2626' }]} numberOfLines={1}>
             {formatCurrency(lucroLiquido)}
           </Text>
           <Text style={styles.cardCount}>receita - despesas efetivas</Text>
@@ -339,6 +341,7 @@ export default function ResumoTab() {
         <Text style={styles.chartTitle}>Receita vs Despesas{selectedPeriod === 'month' ? ' - Mes Atual' : selectedPeriod === '3months' ? ' - Trimestre' : selectedPeriod === '6months' ? ' - Semestre' : selectedPeriod === 'year' ? ' - Ano' : ''}</Text>
         {hasChartData ? (
           <>
+            <ScrollView horizontal showsHorizontalScrollIndicator nestedScrollEnabled contentContainerStyle={{ paddingRight: 16 }}>
             <BarChart
               key={`${selectedPeriod}-${selectedCar}-${monthKeys.length}`}
               data={chartData}
@@ -360,8 +363,9 @@ export default function ResumoTab() {
               yAxisThickness={0}
               xAxisThickness={1}
               xAxisColor="#E5E7EB"
-              width={width - 80}
+              width={Math.max(monthKeys.length * 48 + 45, width - 80)}
             />
+            </ScrollView>
             <View style={styles.legendRow}>
               <View style={styles.legendItem}>
                 <View style={[styles.legendDot, { backgroundColor: '#4F46E5' }]} />
@@ -398,7 +402,7 @@ const styles = StyleSheet.create({
   filterChipTextActive: { color: '#4F46E5', fontWeight: '700' },
   cardsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 16 },
   summaryCard: {
-    width: '47%', backgroundColor: '#fff', borderRadius: 12,
+    flexBasis: '47%', flexGrow: 1, backgroundColor: '#fff', borderRadius: 12,
     padding: 16, elevation: 2,
   },
   cardReceived: { borderLeftWidth: 4, borderLeftColor: '#059669' },
@@ -409,7 +413,7 @@ const styles = StyleSheet.create({
   cardProfit: { borderLeftWidth: 4, borderLeftColor: '#059669' },
   cardLoss: { borderLeftWidth: 4, borderLeftColor: '#DC2626' },
   cardLabel: { fontSize: 12, color: '#6B7280', fontWeight: '600', marginBottom: 6, textTransform: 'uppercase' },
-  cardValue: { fontSize: 18, fontWeight: 'bold', marginBottom: 4 },
+  cardValue: { fontSize: 16, fontWeight: 'bold', marginBottom: 4 },
   cardCount: { fontSize: 11, color: '#9CA3AF' },
   chartCard: {
     backgroundColor: '#fff', borderRadius: 12, padding: 16, elevation: 2,

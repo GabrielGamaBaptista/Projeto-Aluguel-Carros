@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  RefreshControl, SectionList, ScrollView,
+  RefreshControl, SectionList, ScrollView, StatusBar,
 } from 'react-native';
 import { Gauge, Camera, Droplets, Wrench, ClipboardList, CheckCircle2 } from 'lucide-react-native';
 import { authService } from '../services/authService';
@@ -284,7 +284,7 @@ const TasksScreen = ({ navigation }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F3F4F6' },
-  headerBar: { backgroundColor: '#fff', padding: 20, paddingTop: 48, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  headerBar: { backgroundColor: '#fff', padding: 20, paddingTop: (StatusBar.currentHeight || 24) + 8, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
   headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#1F2937' },
   headerSubtitle: { fontSize: 14, color: '#6B7280', marginTop: 4 },
   tabsContainer: { flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },

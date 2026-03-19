@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  RefreshControl, Alert, ScrollView, ActivityIndicator,
+  RefreshControl, Alert, ScrollView, ActivityIndicator, StatusBar,
 } from 'react-native';
 import { Bell, ClipboardList } from 'lucide-react-native';
 import { MdiCar, MdiPin } from '../components/icons/MdiIcons';
@@ -293,7 +293,7 @@ const HomeScreen = ({ navigation }) => {
               <Text style={styles.carYear}>{item.year} - {item.plate}</Text>
               <View style={styles.carFooter}>
                 <Text style={styles.carKm}>{item.totalKm?.toLocaleString() || 0} km</Text>
-                {item.tenantName && <Text style={styles.tenantNameLabel}>{item.tenantName}</Text>}
+                {item.tenantName && <Text style={styles.tenantNameLabel} numberOfLines={1}>{item.tenantName}</Text>}
               </View>
             </TouchableOpacity>
           )}
@@ -333,7 +333,7 @@ const HomeScreen = ({ navigation }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F3F4F6' },
-  header: { backgroundColor: '#fff', padding: 20, paddingTop: 48, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  header: { backgroundColor: '#fff', padding: 20, paddingTop: (StatusBar.currentHeight || 24) + 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
   greeting: { fontSize: 24, fontWeight: 'bold', color: '#1F2937' },
   role: { fontSize: 14, color: '#6B7280', marginTop: 4 },
   statsContainer: { flexDirection: 'row', padding: 16, gap: 12 },
@@ -365,8 +365,8 @@ const styles = StyleSheet.create({
   carModel: { fontSize: 20, fontWeight: 'bold', color: '#1F2937', marginBottom: 4 },
   carYear: { fontSize: 14, color: '#6B7280', marginBottom: 12 },
   carFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  carKm: { fontSize: 14, color: '#6B7280' },
-  tenantNameLabel: { fontSize: 14, color: '#4F46E5', fontWeight: '600' },
+  carKm: { fontSize: 14, color: '#6B7280', flexShrink: 0 },
+  tenantNameLabel: { fontSize: 14, color: '#4F46E5', fontWeight: '600', flexShrink: 1, marginLeft: 8 },
   // Tenant car card
   carCardTenant: { backgroundColor: '#fff', borderRadius: 16, padding: 20, elevation: 3, borderLeftWidth: 4, borderLeftColor: '#4F46E5', marginBottom: 10 },
   carCardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
@@ -406,7 +406,7 @@ const styles = StyleSheet.create({
   addCarPlusIcon: { fontSize: 28, color: '#4F46E5', fontWeight: 'bold' },
   addCarCardText: { fontSize: 15, color: '#4F46E5', fontWeight: '600', marginTop: 2 },
   bottomSpace: { height: 40 },
-  filterRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 8, paddingBottom: 8 },
+  filterRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 8 },
   filterChip: {
     paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20,
     backgroundColor: '#fff', borderWidth: 1, borderColor: '#D1D5DB',

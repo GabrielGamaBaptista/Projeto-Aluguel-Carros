@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, Alert,
-  ActivityIndicator, ScrollView, SafeAreaView, Image,
+  ActivityIndicator, ScrollView, SafeAreaView, Image, StatusBar,
 } from 'react-native';
 import { Lock, LogOut } from 'lucide-react-native';
 import { authService } from '../services/authService';
@@ -209,7 +209,7 @@ const ProfileScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F3F4F6' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { backgroundColor: '#4F46E5', padding: 32, paddingTop: 48, alignItems: 'center' },
+  header: { backgroundColor: '#4F46E5', padding: 32, paddingTop: (StatusBar.currentHeight || 24) + 8, alignItems: 'center' },
   avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
   avatarText: { fontSize: 36, fontWeight: 'bold', color: '#4F46E5' },
   avatarImage: { width: 80, height: 80, borderRadius: 40, marginBottom: 12 },

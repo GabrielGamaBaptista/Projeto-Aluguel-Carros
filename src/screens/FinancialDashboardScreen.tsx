@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, StatusBar } from 'react-native';
 import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
 import { FinancialDataProvider, useFinancialData } from '../components/financial/FinancialDataContext';
 import ResumoTab from '../components/financial/ResumoTab';
@@ -58,7 +58,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F3F4F6' },
   header: {
     backgroundColor: '#fff',
-    paddingTop: 48,
+    paddingTop: (StatusBar.currentHeight || 24) + 8,
     paddingBottom: 16,
     paddingHorizontal: 20,
     borderBottomWidth: 1,

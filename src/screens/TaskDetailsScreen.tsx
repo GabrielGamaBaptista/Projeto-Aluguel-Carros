@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, Alert,
   ActivityIndicator, ScrollView, Image, Platform, Modal, KeyboardAvoidingView,
+  useWindowDimensions,
 } from 'react-native';
 import { Eye, AlertTriangle, CheckCircle2 } from 'lucide-react-native';
 import { tasksService, REQUIRED_PHOTO_ANGLES, PHOTO_ANGLE_LABELS } from '../services/tasksService';
@@ -13,6 +14,8 @@ import ImageViewer from '../components/ImageViewer';
 
 const TaskDetailsScreen = ({ route, navigation }) => {
   const { taskId, carId } = route.params;
+  const { width: screenWidth } = useWindowDimensions();
+  const photoGridItemWidth = Math.floor((screenWidth - 48) / 2);
 
   const [task, setTask] = useState(null);
   const [car, setCar] = useState(null);
@@ -263,7 +266,7 @@ const TaskDetailsScreen = ({ route, navigation }) => {
               <View style={styles.photoGrid}>
                 {(task.photos || []).map((url, idx) => (
                   <TouchableOpacity key={idx} onPress={() => openPhoto(url, 'Foto da Inspecao')}>
-                    <Image source={{ uri: url }} style={styles.reviewPhotoGrid} />
+                    <Image source={{ uri: url }} style={[styles.reviewPhotoGrid, { width: photoGridItemWidth }]} />
                   </TouchableOpacity>
                 ))}
               </View>
@@ -753,7 +756,7 @@ const styles = StyleSheet.create({
   reviewPhoto: { width: '100%', height: 250, borderRadius: 12, marginBottom: 4, backgroundColor: '#E5E7EB' },
   reviewPhotoSmall: { width: 200, height: 150, borderRadius: 8, marginRight: 8, backgroundColor: '#E5E7EB' },
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  reviewPhotoGrid: { width: '48%', height: 150, borderRadius: 8, backgroundColor: '#E5E7EB' },
+  reviewPhotoGrid: { height: 150, borderRadius: 8, backgroundColor: '#E5E7EB' },
   tapToZoom: { fontSize: 12, color: '#4F46E5', textAlign: 'center', marginBottom: 8 },
   tapToZoomGlobal: { fontSize: 12, color: '#4F46E5', textAlign: 'center', marginTop: 8 },
   angleSection: { marginBottom: 24, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', paddingBottom: 16 },

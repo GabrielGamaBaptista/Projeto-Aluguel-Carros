@@ -485,7 +485,7 @@ const styles = StyleSheet.create({
   cepRow: { flexDirection: 'row', alignItems: 'center' },
   cepInput: { flex: 1 },
   cepLoader: { marginLeft: 12 },
-  personTypeRow: { flexDirection: 'row', gap: 8 },
+  personTypeRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   personTypeCard: { flex: 1, padding: 14, borderRadius: 10, borderWidth: 2, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB', alignItems: 'center' },
   personTypeActive: { borderColor: '#4F46E5', backgroundColor: '#EEF2FF' },
   personTypeIcon: { marginBottom: 4, alignItems: 'center' },

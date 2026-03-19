@@ -182,9 +182,11 @@ const VehicleHistoryScreen = ({ route, navigation }: any) => {
             <>
               <View style={styles.chartCard}>
                 <Text style={styles.chartSubtitle}>Progressao de KM ao longo do tempo</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator nestedScrollEnabled contentContainerStyle={{ paddingRight: 16 }}>
                 <LineChart
                   data={kmChartData}
-                  width={chartWidth}
+                  spacing={50}
+                  width={Math.max(kmTasks.length * 50 + 45, chartWidth)}
                   height={180}
                   color="#4F46E5"
                   startFillColor="#4F46E580"
@@ -203,6 +205,7 @@ const VehicleHistoryScreen = ({ route, navigation }: any) => {
                   xAxisThickness={1}
                   xAxisColor="#E5E7EB"
                 />
+                </ScrollView>
               </View>
               {kmDisplayed.map(task => (
                 <View key={task.id} style={styles.historyCard}>
@@ -250,13 +253,16 @@ const VehicleHistoryScreen = ({ route, navigation }: any) => {
             <>
               <View style={styles.chartCard}>
                 <Text style={styles.chartSubtitle}>Quilometragem por troca</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator nestedScrollEnabled contentContainerStyle={{ paddingRight: 16 }}>
                 <BarChart
                   data={oilChartData}
                   {...commonBarProps}
+                  width={Math.max(oilTasks.length * 46 + 45, chartWidth)}
                   maxValue={oilYAxis.maxValue}
                   stepValue={oilYAxis.stepValue}
                   noOfSections={oilYAxis.noOfSections}
                 />
+                </ScrollView>
               </View>
               {oilDisplayed.map(task => (
                 <View key={task.id} style={styles.historyCard}>
@@ -291,13 +297,16 @@ const VehicleHistoryScreen = ({ route, navigation }: any) => {
               {hasMainCost && (
                 <View style={styles.chartCard}>
                   <Text style={styles.chartSubtitle}>Custo por manutencao (R$)</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator nestedScrollEnabled contentContainerStyle={{ paddingRight: 16 }}>
                   <BarChart
                     data={mainChartData}
                     {...commonBarProps}
+                    width={Math.max(maintenanceTasks.length * 46 + 45, chartWidth)}
                     maxValue={mainYAxis.maxValue}
                     stepValue={mainYAxis.stepValue}
                     noOfSections={mainYAxis.noOfSections}
                   />
+                  </ScrollView>
                 </View>
               )}
               {mainDisplayed.map(task => (
@@ -362,7 +371,7 @@ const styles = StyleSheet.create({
   },
   chartCard: {
     backgroundColor: '#fff', borderRadius: 12, padding: 16,
-    elevation: 2, marginBottom: 12, overflow: 'hidden',
+    elevation: 2, marginBottom: 12,
   },
   chartSubtitle: { fontSize: 13, fontWeight: '600', color: '#6B7280', marginBottom: 12 },
   historyCard: {

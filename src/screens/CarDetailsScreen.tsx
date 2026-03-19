@@ -252,19 +252,19 @@ const CarDetailsScreen = ({ route, navigation }) => {
         <View style={styles.detailsGrid}>
           <View style={styles.detailCard}>
             <Text style={styles.detailLabel}>Ano</Text>
-            <Text style={styles.detailValue}>{car.year}</Text>
+            <Text style={styles.detailValue} numberOfLines={1}>{car.year}</Text>
           </View>
           <View style={styles.detailCard}>
             <Text style={styles.detailLabel}>Placa</Text>
-            <Text style={styles.detailValue}>{car.plate}</Text>
+            <Text style={styles.detailValue} numberOfLines={1}>{car.plate}</Text>
           </View>
           <View style={styles.detailCard}>
             <Text style={styles.detailLabel}>Cor</Text>
-            <Text style={styles.detailValue}>{car.color || 'N/A'}</Text>
+            <Text style={styles.detailValue} numberOfLines={1}>{car.color || 'N/A'}</Text>
           </View>
           <View style={styles.detailCard}>
             <Text style={styles.detailLabel}>Quilometragem</Text>
-            <Text style={styles.detailValue}>{car.totalKm?.toLocaleString() || 0} km</Text>
+            <Text style={styles.detailValue} numberOfLines={1}>{car.totalKm?.toLocaleString() || 0} km</Text>
           </View>
         </View>
 
@@ -591,9 +591,9 @@ const styles = StyleSheet.create({
   statusRented: { backgroundColor: '#FEE2E2' },
   statusText: { fontSize: 12, fontWeight: '600' },
   detailsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 24 },
-  detailCard: { backgroundColor: '#fff', padding: 16, borderRadius: 12, width: '48%' },
+  detailCard: { backgroundColor: '#fff', padding: 16, borderRadius: 12, flexBasis: '46%', flexGrow: 1 },
   detailLabel: { fontSize: 12, color: '#6B7280', marginBottom: 4 },
-  detailValue: { fontSize: 18, fontWeight: 'bold', color: '#1F2937' },
+  detailValue: { fontSize: 16, fontWeight: 'bold', color: '#1F2937' },
   section: { marginBottom: 24 },
   sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#1F2937', marginBottom: 12 },
   // Documents
@@ -647,9 +647,9 @@ const styles = StyleSheet.create({
   taskTitle: { fontSize: 16, color: '#1F2937', fontWeight: '600' },
   completedDate: { fontSize: 12, color: '#6B7280', marginTop: 4 },
   taskArrow: { fontSize: 20, color: '#9CA3AF' },
-  infoRow: { backgroundColor: '#fff', padding: 16, borderRadius: 12, flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  infoLabel: { fontSize: 14, color: '#6B7280' },
-  infoValue: { fontSize: 14, fontWeight: '600', color: '#1F2937' },
+  infoRow: { backgroundColor: '#fff', padding: 16, borderRadius: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
+  infoLabel: { fontSize: 14, color: '#6B7280', flex: 1, marginRight: 8 },
+  infoValue: { fontSize: 14, fontWeight: '600', color: '#1F2937', flexShrink: 0, textAlign: 'right' },
   deleteButton: { backgroundColor: '#FEE2E2', padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 12, marginBottom: 40 },
   deleteButtonText: { fontSize: 16, fontWeight: 'bold', color: '#DC2626' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
