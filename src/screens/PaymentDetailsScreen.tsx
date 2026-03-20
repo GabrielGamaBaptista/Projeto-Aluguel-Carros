@@ -68,6 +68,7 @@ export default function PaymentDetailsScreen() {
   const [charge, setCharge] = useState(initialCharge ?? null);
   const [pixData, setPixData] = useState<{ encodedImage: string; payload: string } | null>(null);
   const [loadingPix, setLoadingPix] = useState(false);
+  const [pixLoadError, setPixLoadError] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -107,9 +108,17 @@ export default function PaymentDetailsScreen() {
   // Carregar QR Code PIX quando charge e role estiverem prontos.
   // Recarrega apenas quando asaasPaymentId muda (ex: apos editCharge), nao a cada mudanca de status.
   useEffect(() => {
+    let active = true;
+
     if (!charge || !userRole) return;
     const canPay = charge.status === 'PENDING' || charge.status === 'OVERDUE';
-    if (!canPay) return;
+    if (!canPay) {
+      // Limpar estado de loading/erro quando cobranca nao e mais pagavel (ex: foi paga enquanto tela estava aberta)
+      setPixLoadError(false);
+      setLoadingPix(false);
+      setPixData(null);
+      return;
+    }
     const currentPaymentId = charge.asaasPaymentId;
     if (!currentPaymentId) return;
     if (pixLoadedForPaymentId.current === currentPaymentId) return; // ja carregado para este asaasPaymentId
@@ -117,11 +126,19 @@ export default function PaymentDetailsScreen() {
       pixLoadedForPaymentId.current = currentPaymentId;
       setLoadingPix(true);
       setPixData(null);
+      setPixLoadError(false);
       paymentService.getPixQrCode(chargeId).then((result: any) => {
-        if (result && !result.error) setPixData(result);
+        if (!active) return; // componente desmontado ou effect re-executado, descartar resultado
+        if (result && !result.error) {
+          setPixData(result);
+        } else {
+          setPixLoadError(true);
+        }
         setLoadingPix(false);
       });
     }
+
+    return () => { active = false; };
   }, [charge, userRole, chargeId]);
 
   const handleCancel = async () => {
@@ -245,6 +262,29 @@ export default function PaymentDetailsScreen() {
         </Text>
       </View>
 
+      {/* Comprovante de pagamento */}
+      {(charge.status === 'RECEIVED' || charge.status === 'CONFIRMED') && (
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Comprovante de Pagamento</Text>
+          {charge.transactionReceiptUrl ? (
+            <TouchableOpacity
+              style={styles.receiptButton}
+              onPress={() => {
+                if (charge.transactionReceiptUrl) {
+                  Linking.openURL(charge.transactionReceiptUrl).catch(() =>
+                    Alert.alert('Erro', 'Nao foi possivel abrir o comprovante.')
+                  );
+                }
+              }}
+            >
+              <Text style={styles.receiptButtonText}>Ver Comprovante</Text>
+            </TouchableOpacity>
+          ) : (
+            <Text style={styles.pendingReceiptText}>Comprovante sendo processado...</Text>
+          )}
+        </View>
+      )}
+
       {/* Seção PIX para locatário */}
       {userRole === 'locatario' && charge.billingType === 'PIX' && canPay && (
         <View style={styles.card}>
@@ -262,9 +302,9 @@ export default function PaymentDetailsScreen() {
                 <Text style={styles.copyButtonText}>Copiar código Pix</Text>
               </TouchableOpacity>
             </>
-          ) : (
-            <Text style={styles.errorText}>Não foi possível carregar o QR Code.</Text>
-          )}
+          ) : pixLoadError ? (
+            <Text style={styles.errorText}>Nao foi possivel carregar o QR Code.</Text>
+          ) : null}
         </View>
       )}
 
@@ -276,7 +316,9 @@ export default function PaymentDetailsScreen() {
             style={styles.boletoButton}
             onPress={() => {
               if (charge.bankSlipUrl) {
-                Linking.openURL(charge.bankSlipUrl);
+                Linking.openURL(charge.bankSlipUrl).catch(() =>
+                  Alert.alert('Erro', 'Nao foi possivel abrir o boleto.')
+                );
               } else {
                 Alert.alert('Boleto indisponivel', 'O link do boleto ainda nao esta disponivel.');
               }
@@ -419,6 +461,14 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   errorText: { color: '#DC2626', textAlign: 'center', marginVertical: 8 },
+  receiptButton: {
+    backgroundColor: '#059669',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  receiptButtonText: { color: '#fff', fontWeight: '600', fontSize: 15 },
+  pendingReceiptText: { fontSize: 14, color: '#6B7280', fontStyle: 'italic', textAlign: 'center' },
   editButton: {
     backgroundColor: '#F59E0B', borderRadius: 8,
     paddingVertical: 14, alignItems: 'center', marginTop: 8, marginBottom: 8,

@@ -67,6 +67,8 @@ exports.asaasWebhook = onRequest({ invoker: 'public', cors: false }, async (req,
       }
     }
 
+    let notificationPayload = null;
+
     await db.runTransaction(async (tx) => {
       const chargeDoc = await tx.get(chargeRef);
 
@@ -117,19 +119,19 @@ exports.asaasWebhook = onRequest({ invoker: 'public', cors: false }, async (req,
 
       switch (event) {
         case 'PAYMENT_RECEIVED':
-          updateData.status = 'RECEIVED';
-          updateData.paymentDate = payment.paymentDate;
-          updateData.netAmount = payment.netValue;
-          updateData.platformFee = parseFloat(((chargeData.amount || 0) * (config.platform_fee_percent / 100)).toFixed(2));
-          break;
         case 'PAYMENT_RECEIVED_IN_CASH':
           updateData.status = 'RECEIVED';
           updateData.paymentDate = payment.paymentDate;
           updateData.netAmount = payment.netValue;
           updateData.platformFee = parseFloat(((chargeData.amount || 0) * (config.platform_fee_percent / 100)).toFixed(2));
+          updateData.transactionReceiptUrl = payment.transactionReceiptUrl || null;
           break;
         case 'PAYMENT_CONFIRMED':
           updateData.status = 'CONFIRMED';
+          updateData.paymentDate = payment.paymentDate;
+          updateData.netAmount = payment.netValue;
+          updateData.platformFee = parseFloat(((chargeData.amount || 0) * (config.platform_fee_percent / 100)).toFixed(2));
+          updateData.transactionReceiptUrl = payment.transactionReceiptUrl || null;
           break;
         case 'PAYMENT_OVERDUE':
           updateData.status = 'OVERDUE';
@@ -152,69 +154,83 @@ exports.asaasWebhook = onRequest({ invoker: 'public', cors: false }, async (req,
           break;
       }
 
+      // Capturar contexto para notificacoes antes de sair da transacao (evita leitura extra pos-transacao).
+      // Nao notificar se a transicao e entre dois status "pago" (ex: CONFIRMED → RECEIVED):
+      // o Asaas envia ambos os eventos, mas o usuario ja foi notificado na primeira transicao.
+      const ALREADY_PAID_STATUSES = ['RECEIVED', 'CONFIRMED'];
+      const isTransitionBetweenPaidStatuses =
+        ALREADY_PAID_STATUSES.includes(currentStatus) && ALREADY_PAID_STATUSES.includes(statusFromEvent);
+
+      if (!isTransitionBetweenPaidStatuses) {
+        notificationPayload = {
+          resolvedChargeId: chargeRef.id,
+          landlordId: chargeData.landlordId,
+          tenantId: chargeData.tenantId,
+          amount: chargeData.amount,
+          dueDate: chargeData.dueDate,
+          carInfo: chargeData.carInfo,
+        };
+      }
+
       tx.update(chargeRef, updateData);
     });
 
-    // Notificacoes pos-transacao
-    if (['PAYMENT_RECEIVED', 'PAYMENT_RECEIVED_IN_CASH', 'PAYMENT_CONFIRMED', 'PAYMENT_OVERDUE'].includes(event)) {
+    // Notificacoes pos-transacao — so enviadas se a transacao realmente atualizou o documento (idempotencia)
+    if (notificationPayload && ['PAYMENT_RECEIVED', 'PAYMENT_RECEIVED_IN_CASH', 'PAYMENT_CONFIRMED', 'PAYMENT_OVERDUE'].includes(event)) {
       try {
-        const db = admin.firestore();
-        const chargeDoc = await db.collection('charges').doc(chargeId).get();
-        if (chargeDoc.exists) {
-          const { landlordId, tenantId, amount, dueDate, carInfo } = chargeDoc.data();
-          const formattedAmount = (amount || 0).toFixed(2).replace('.', ',');
-          const [year, month, day] = (dueDate || '').split('-');
-          const dueDateBR = dueDate ? `${day}/${month}/${year}` : '';
+        const { resolvedChargeId, landlordId, tenantId, amount, dueDate, carInfo } = notificationPayload;
+        const formattedAmount = (amount || 0).toFixed(2).replace('.', ',');
+        const [year, month, day] = (dueDate || '').split('-');
+        const dueDateBR = dueDate ? `${day}/${month}/${year}` : '';
 
-          if (event === 'PAYMENT_OVERDUE') {
-            // Notificar locatario que cobranca venceu
-            await db.collection('notifications').add({
-              userId: tenantId,
-              title: `Cobranca vencida — ${carInfo || ''}`,
-              body: `Sua cobranca de R$ ${formattedAmount} venceu em ${dueDateBR}. Regularize o pagamento.`,
-              data: { type: 'charge_overdue', chargeId },
-              read: false,
-              sent: false,
-              createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            });
-            // Notificar locador que locatario nao pagou
-            const tenantDocOverdue = await db.collection('users').doc(tenantId).get();
-            const tenantNameOverdue = tenantDocOverdue.exists ? tenantDocOverdue.data().name : 'Locatario';
-            await db.collection('notifications').add({
-              userId: landlordId,
-              title: `Pagamento em atraso — ${carInfo || ''}`,
-              body: `${tenantNameOverdue} nao pagou a cobranca de R$ ${formattedAmount} que venceu em ${dueDateBR}.`,
-              data: { type: 'charge_overdue_landlord', chargeId },
-              read: false,
-              sent: false,
-              createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            });
-          } else {
-            // Notificar locador que cobranca foi paga/confirmada
-            const tenantDoc = await db.collection('users').doc(tenantId).get();
-            const tenantName = tenantDoc.exists ? tenantDoc.data().name : 'Locatario';
-            const eventLabel = event === 'PAYMENT_CONFIRMED' ? 'Pagamento confirmado' : 'Pagamento recebido';
-            await db.collection('notifications').add({
-              userId: landlordId,
-              title: `${eventLabel} — ${carInfo || ''}`,
-              body: `${tenantName} pagou a cobranca de R$ ${formattedAmount} (venc. ${dueDateBR}).`,
-              data: { type: 'payment_received', chargeId },
-              read: false,
-              sent: false,
-              createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            });
-            // Notificar locatario com confirmacao de recebimento
-            const eventLabelTenant = event === 'PAYMENT_CONFIRMED' ? 'confirmado' : 'recebido';
-            await db.collection('notifications').add({
-              userId: tenantId,
-              title: `Pagamento ${eventLabelTenant} — ${carInfo || ''}`,
-              body: `Seu pagamento de R$ ${formattedAmount} (venc. ${dueDateBR}) foi ${eventLabelTenant} com sucesso.`,
-              data: { type: 'payment_confirmed_tenant', chargeId },
-              read: false,
-              sent: false,
-              createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            });
-          }
+        if (event === 'PAYMENT_OVERDUE') {
+          // Notificar locatario que cobranca venceu
+          await db.collection('notifications').add({
+            userId: tenantId,
+            title: `Cobranca vencida — ${carInfo || ''}`,
+            body: `Sua cobranca de R$ ${formattedAmount} venceu em ${dueDateBR}. Regularize o pagamento.`,
+            data: { type: 'charge_overdue', chargeId: resolvedChargeId },
+            read: false,
+            sent: false,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+          // Notificar locador que locatario nao pagou
+          const tenantDocOverdue = await db.collection('users').doc(tenantId).get();
+          const tenantNameOverdue = tenantDocOverdue.exists ? tenantDocOverdue.data().name : 'Locatario';
+          await db.collection('notifications').add({
+            userId: landlordId,
+            title: `Pagamento em atraso — ${carInfo || ''}`,
+            body: `${tenantNameOverdue} nao pagou a cobranca de R$ ${formattedAmount} que venceu em ${dueDateBR}.`,
+            data: { type: 'charge_overdue_landlord', chargeId: resolvedChargeId },
+            read: false,
+            sent: false,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        } else {
+          // Notificar locador que cobranca foi paga/confirmada
+          const tenantDoc = await db.collection('users').doc(tenantId).get();
+          const tenantName = tenantDoc.exists ? tenantDoc.data().name : 'Locatario';
+          const eventLabel = event === 'PAYMENT_CONFIRMED' ? 'Pagamento confirmado' : 'Pagamento recebido';
+          await db.collection('notifications').add({
+            userId: landlordId,
+            title: `${eventLabel} — ${carInfo || ''}`,
+            body: `${tenantName} pagou a cobranca de R$ ${formattedAmount} (venc. ${dueDateBR}).`,
+            data: { type: 'payment_received', chargeId: resolvedChargeId },
+            read: false,
+            sent: false,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+          // Notificar locatario com confirmacao de recebimento
+          const eventLabelTenant = event === 'PAYMENT_CONFIRMED' ? 'confirmado' : 'recebido';
+          await db.collection('notifications').add({
+            userId: tenantId,
+            title: `Pagamento ${eventLabelTenant} — ${carInfo || ''}`,
+            body: `Seu pagamento de R$ ${formattedAmount} (venc. ${dueDateBR}) foi ${eventLabelTenant} com sucesso.`,
+            data: { type: 'payment_confirmed_tenant', chargeId: resolvedChargeId },
+            read: false,
+            sent: false,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
         }
       } catch (notifErr) {
         console.error('Erro ao criar notificacao de pagamento:', notifErr.message);

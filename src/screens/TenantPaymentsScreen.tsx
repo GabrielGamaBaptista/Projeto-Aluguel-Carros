@@ -51,7 +51,8 @@ const sortCharges = (list: any[]) =>
 
 const formatDate = (dateStr: string) => {
   if (!dateStr) return '';
-  const [year, month, day] = dateStr.split('-');
+  const dateOnly = dateStr.split('T')[0];
+  const [year, month, day] = dateOnly.split('-');
   return `${day}/${month}/${year}`;
 };
 
@@ -80,8 +81,13 @@ export default function TenantPaymentsScreen() {
 
   const renderCharge = ({ item }: { item: any }) => {
     const canPay = item.status === 'PENDING' || item.status === 'OVERDUE';
+    const isPaid = item.status === 'RECEIVED' || item.status === 'CONFIRMED';
     return (
-      <View style={styles.card}>
+      <TouchableOpacity
+        style={styles.card}
+        onPress={() => navigation.navigate('PaymentDetails', { chargeId: item.id, charge: item })}
+        activeOpacity={0.7}
+      >
         <View style={styles.cardHeader}>
           <Text style={styles.carInfo}>{item.carInfo || 'Aluguel'}</Text>
           <View style={[styles.badge, { backgroundColor: getStatusColor(item.status) }]}>
@@ -91,17 +97,14 @@ export default function TenantPaymentsScreen() {
         <Text style={styles.amount}>R$ {item.amount?.toFixed(2)}</Text>
         <Text style={styles.dueDate}>Vencimento: {formatDate(item.dueDate)}</Text>
         {canPay && (
-          <TouchableOpacity
-            style={styles.payButton}
-            onPress={() => navigation.navigate('PaymentDetails', { chargeId: item.id, charge: item })}
-          >
+          <View style={styles.payButton}>
             <Text style={styles.payButtonText}>Pagar</Text>
-          </TouchableOpacity>
+          </View>
         )}
-        {item.status === 'RECEIVED' && (
+        {isPaid && item.paymentDate && (
           <Text style={styles.paidText}>Pago em {formatDate(item.paymentDate)}</Text>
         )}
-      </View>
+      </TouchableOpacity>
     );
   };
 

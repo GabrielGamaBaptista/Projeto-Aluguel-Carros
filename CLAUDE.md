@@ -356,6 +356,7 @@ date-fns                            (para differenceInDays em tasksService)
   bankSlipUrl: string | null,       // URL do boleto
   pixQrCodeUrl: string | null,      // URL do QR Code PIX (preenchida sob demanda)
   pixCopiaECola: string | null,     // código PIX copia-e-cola
+  transactionReceiptUrl: string | null, // URL do comprovante Asaas (preenchida pelo webhook ao pagar)
   dueDate: string,                  // "YYYY-MM-DD"
   paymentDate: string | null,       // "YYYY-MM-DD" — preenchida pelo webhook quando pago
   description: string,
