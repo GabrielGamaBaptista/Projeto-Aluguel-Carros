@@ -123,7 +123,7 @@ const HomeScreen = ({ navigation }) => {
         { text: 'Cancelar', style: 'cancel' },
         {
           text: 'Recusar', style: 'destructive', onPress: async () => {
-            await tenantRequestService.rejectRequest(request.id, request.landlordId, request.carInfo);
+            await tenantRequestService.rejectRequest(request.id, request.landlordId, request.carInfo, request.carId);
             loadData();
           }
         },

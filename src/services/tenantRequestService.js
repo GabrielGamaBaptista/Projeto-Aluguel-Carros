@@ -145,7 +145,7 @@ export const tenantRequestService = {
   },
 
   // Recusar solicitacao
-  rejectRequest: async (requestId, landlordId, carInfo) => {
+  rejectRequest: async (requestId, landlordId, carInfo, carId) => {
     try {
       await firestore().collection('tenantRequests').doc(requestId).update({
         status: 'rejected',
@@ -158,7 +158,7 @@ export const tenantRequestService = {
           landlordId,
           'Solicitacao Recusada',
           `O locatario recusou a atribuicao do carro ${carInfo || ''}.`,
-          { type: 'request_rejected' }
+          { type: 'request_rejected', carId: carId || null }
         );
       }
 

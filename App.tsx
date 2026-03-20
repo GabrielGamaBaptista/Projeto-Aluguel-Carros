@@ -1,15 +1,17 @@
 // App.tsx
 import React, { useState, useEffect, useRef } from 'react';
-import { ActivityIndicator, View, StyleSheet, Text } from 'react-native';
+import { ActivityIndicator, View, StyleSheet, Text, StatusBar } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ClipboardList, Megaphone, BarChart3, User } from 'lucide-react-native';
+import FlashMessage from 'react-native-flash-message';
 import { MdiCar, MdiCash } from './src/components/icons/MdiIcons';
 import { authService } from './src/services/authService';
 import { notificationService } from './src/services/notificationService';
 import { permissionService } from './src/services/permissionService';
+import { navigationRef } from './src/services/navigationService';
 import PermissionsScreen from './src/screens/PermissionsScreen';
 
 import LoginScreen from './src/screens/LoginScreen';
@@ -127,7 +129,7 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!user ? (
           <>
@@ -176,6 +178,7 @@ export default function App() {
         )}
       </Stack.Navigator>
     </NavigationContainer>
+    <FlashMessage position="top" statusBarHeight={StatusBar.currentHeight ?? 0} />
     </SafeAreaProvider>
   );
 }

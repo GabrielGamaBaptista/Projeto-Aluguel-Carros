@@ -201,7 +201,7 @@ export const tasksService = {
         if (!hasPending) {
           const dueDate = new Date();
           dueDate.setDate(dueDate.getDate() + 3); // 3 dias para completar
-          await firestore().collection('tasks').add({
+          const kmDocRef = await firestore().collection('tasks').add({
             carId, type: TASK_TYPES.KM_UPDATE,
             title: 'Atualizacao de Quilometragem',
             description: 'Atualize a quilometragem do veiculo e envie foto do painel (tarefa automatica a cada 10 dias).',
@@ -214,7 +214,7 @@ export const tasksService = {
             await notificationService.createNotification(tenantId,
               'Atualizacao de Quilometragem',
               `Atualize a quilometragem do veiculo ate ${formatDateBR(dueDate)}.`,
-              { carId, type: 'auto_task' }
+              { carId, taskId: kmDocRef.id, type: 'auto_task' }
             );
           }
           tasksGenerated++;
@@ -229,7 +229,7 @@ export const tasksService = {
         if (!hasPending) {
           const dueDate = new Date();
           dueDate.setDate(dueDate.getDate() + 5); // 5 dias para completar
-          await firestore().collection('tasks').add({
+          const photoDocRef = await firestore().collection('tasks').add({
             carId, type: TASK_TYPES.PHOTO_INSPECTION,
             title: 'Revisao Fotografica',
             description: 'Envie fotos atualizadas do veiculo (tarefa automatica a cada 15 dias).',
@@ -242,7 +242,7 @@ export const tasksService = {
             await notificationService.createNotification(tenantId,
               'Revisao Fotografica',
               `Envie fotos atualizadas do veiculo ate ${formatDateBR(dueDate)}.`,
-              { carId, type: 'auto_task' }
+              { carId, taskId: photoDocRef.id, type: 'auto_task' }
             );
           }
           tasksGenerated++;
@@ -258,7 +258,7 @@ export const tasksService = {
         if (!hasPending) {
           const dueDate = new Date();
           dueDate.setDate(dueDate.getDate() + 7);
-          await firestore().collection('tasks').add({
+          const oilDocRef = await firestore().collection('tasks').add({
             carId, type: TASK_TYPES.OIL_CHANGE,
             title: 'Troca de Oleo',
             description: `Trocar oleo do motor (${kmSinceOilChange.toLocaleString()} km desde a ultima troca). Envie fotos do adesivo e recibo.`,
@@ -270,7 +270,7 @@ export const tasksService = {
             await notificationService.createNotification(tenantId,
               'Troca de Oleo',
               `Realize a troca de oleo (${kmSinceOilChange.toLocaleString()} km desde a ultima). Prazo: ${formatDateBR(dueDate)}.`,
-              { carId, type: 'auto_task' }
+              { carId, taskId: oilDocRef.id, type: 'auto_task' }
             );
           }
           tasksGenerated++;
@@ -619,7 +619,7 @@ export const tasksService = {
             task.tenantId,
             'Tarefa Aprovada',
             `Sua tarefa "${task.title}" foi aprovada pelo locador.`,
-            { type: 'task_approved', taskId }
+            { type: 'task_approved', taskId, carId: task.carId }
           );
         }
       }
@@ -652,7 +652,7 @@ export const tasksService = {
             task.tenantId,
             'Correcao Solicitada',
             `O locador solicitou correcao na tarefa "${task.title}": ${reason}`,
-            { type: 'task_revision', taskId }
+            { type: 'task_revision', taskId, carId: task.carId }
           );
         }
       }

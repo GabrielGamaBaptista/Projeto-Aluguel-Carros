@@ -87,6 +87,14 @@ const ChargesScreen: React.FC<Props> = ({ route }) => {
     }
   };
 
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return dateStr;
+    const [year, month, day] = parts;
+    return `${day}/${month}/${year}`;
+  };
+
   const formatDateInput = (text: string) => {
     const clean = text.replace(/\D/g, '');
     if (clean.length <= 2) return clean;
@@ -157,7 +165,7 @@ const ChargesScreen: React.FC<Props> = ({ route }) => {
         </View>
       </View>
       <View style={styles.chargeDetails}>
-        <Text style={styles.detailText}>Vencimento: {item.dueDate}</Text>
+        <Text style={styles.detailText}>Vencimento: {formatDate(item.dueDate)}</Text>
         <Text style={styles.detailText}>Metodo: {item.billingType}</Text>
       </View>
     </TouchableOpacity>

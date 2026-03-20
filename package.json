@@ -27,6 +27,7 @@
     "lucide-react-native": "^0.577.0",
     "react": "19.1.0",
     "react-native": "0.81.5",
+    "react-native-flash-message": "^0.4.2",
     "react-native-gifted-charts": "^1.4.76",
     "react-native-image-picker": "^7.1.2",
     "react-native-linear-gradient": "^2.8.3",
