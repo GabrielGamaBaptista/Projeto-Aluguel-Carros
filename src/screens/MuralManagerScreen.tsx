@@ -150,6 +150,12 @@ const MuralManagerScreen = ({ navigation }) => {
 
   const getCategoryLabel = (val) => MURAL_CATEGORIES.find(c => c.value === val)?.label || val;
 
+  const getCategoryBadgeStyle = (category: string) => {
+    if (category === 'urgente') return { backgroundColor: '#FEE2E2', color: '#DC2626' };
+    if (category === 'aviso') return { backgroundColor: '#FEF3C7', color: '#92400E' };
+    return { backgroundColor: '#EEF2FF', color: '#4F46E5' };
+  };
+
   const renderPost = ({ item }) => (
     <View style={styles.postCard}>
       <View style={styles.postHeader}>
@@ -160,7 +166,7 @@ const MuralManagerScreen = ({ navigation }) => {
               <Text style={styles.pinnedBadgeText}> Fixado</Text>
             </View>
           )}
-          <Text style={styles.categoryBadge}>{getCategoryLabel(item.category)}</Text>
+          <Text style={[styles.categoryBadge, getCategoryBadgeStyle(item.category)]}>{getCategoryLabel(item.category)}</Text>
           <Text style={styles.targetBadge}>
             {item.targetType === 'all' ? 'Todos' : 'Especifico'}
           </Text>
@@ -325,7 +331,7 @@ const styles = StyleSheet.create({
   postMeta: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
   pinnedBadge: { flexDirection: 'row', alignItems: 'center' },
   pinnedBadgeText: { fontSize: 12, color: '#B45309', fontWeight: '700' },
-  categoryBadge: { backgroundColor: '#EEF2FF', color: '#4F46E5', fontSize: 11, fontWeight: '700', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, overflow: 'hidden' },
+  categoryBadge: { fontSize: 11, fontWeight: '700', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, overflow: 'hidden' },
   targetBadge: { backgroundColor: '#F3F4F6', color: '#6B7280', fontSize: 11, fontWeight: '600', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, overflow: 'hidden' },
   postDate: { fontSize: 12, color: '#9CA3AF' },
   postTitle: { fontSize: 17, fontWeight: 'bold', color: '#1F2937', marginBottom: 6 },

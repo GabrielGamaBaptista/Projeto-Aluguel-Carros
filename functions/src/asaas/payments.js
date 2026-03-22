@@ -40,7 +40,13 @@ const createPayment = async (subaccountApiKey, data) => {
       ];
     }
 
-    const response = await client.post('/payments', payload);
+    // Idempotency key: usa o externalReference (chargeId Firestore) para evitar cobrancas duplicadas em retentativas (Q2.8)
+    const headers = {};
+    if (payload.externalReference) {
+      headers['X-Idempotency-Key'] = payload.externalReference;
+    }
+
+    const response = await client.post('/payments', payload, { headers });
     return response.data;
   } catch (error) {
     console.error('Erro ao criar pagamento no Asaas:', error.response?.data || error.message);

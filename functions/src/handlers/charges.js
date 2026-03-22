@@ -200,8 +200,8 @@ const calcNextDueDate = (currentDueDateStr, frequency, dayOfMonth) => {
     const nextMonth = currentDueDate.getMonth() + 1;
     const nextYear = currentDueDate.getFullYear() + (nextMonth > 11 ? 1 : 0);
     const normalizedMonth = nextMonth % 12;
-    const lastDayOfNextMonth = new Date(nextYear, normalizedMonth + 1, 0).getDate();
-    const safeDay = Math.min(targetDay, lastDayOfNextMonth);
+    const lastDayOfTargetMonth = new Date(nextYear, normalizedMonth + 1, 0).getDate();
+    const safeDay = Math.min(targetDay, lastDayOfTargetMonth);
     nextDate = new Date(nextYear, normalizedMonth, safeDay, 12, 0, 0);
   } else {
     nextDate = new Date(currentDueDate);

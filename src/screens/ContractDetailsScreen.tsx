@@ -135,6 +135,35 @@ export default function ContractDetailsScreen({ route, navigation }: any) {
     }
   }, [newAmount, contract.rentAmount, contractId, pendingCharge]);
 
+  const handleCancelContract = useCallback(() => {
+    Alert.alert(
+      'Cancelar Contrato',
+      'Tem certeza? Isso cancelara o contrato e todas as cobrancas pendentes/vencidas. Esta acao nao pode ser desfeita.',
+      [
+        { text: 'Nao', style: 'cancel' },
+        {
+          text: 'Cancelar Contrato',
+          style: 'destructive',
+          onPress: async () => {
+            setLoading(true);
+            try {
+              const result = await paymentService.cancelActiveContractByCar(contract.carId);
+              if (!result?.success) {
+                Alert.alert('Erro', result?.error || 'Nao foi possivel cancelar o contrato.');
+                return;
+              }
+              Alert.alert('Contrato cancelado', 'O contrato e suas cobrancas foram cancelados.');
+            } catch (err: any) {
+              Alert.alert('Erro', err?.message || 'Nao foi possivel cancelar.');
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  }, [contract.carId]);
+
   const handleDeleteContract = useCallback(() => {
     Alert.alert(
       'Excluir Contrato',
@@ -329,6 +358,19 @@ export default function ContractDetailsScreen({ route, navigation }: any) {
         <Text style={styles.btnChargesText}>Ver Cobranças deste Contrato →</Text>
       </TouchableOpacity>
 
+      {/* Cancelar contrato ativo */}
+      {contract.active && (
+        <TouchableOpacity
+          style={styles.btnCancelContract}
+          onPress={handleCancelContract}
+          disabled={loading}
+        >
+          {loading
+            ? <ActivityIndicator size="small" color="#fff" />
+            : <Text style={styles.btnCancelContractText}>Cancelar Contrato</Text>}
+        </TouchableOpacity>
+      )}
+
       {/* Excluir contrato inativo */}
       {!contract.active && (
         <TouchableOpacity
@@ -392,6 +434,11 @@ const styles = StyleSheet.create({
     alignItems: 'center', marginBottom: 8,
   },
   btnChargesText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  btnCancelContract: {
+    backgroundColor: '#DC2626', borderRadius: 12, padding: 14,
+    alignItems: 'center', marginBottom: 8,
+  },
+  btnCancelContractText: { color: '#fff', fontWeight: '600', fontSize: 14 },
   btnDelete: {
     borderWidth: 1, borderColor: '#DC2626', borderRadius: 12, padding: 14,
     alignItems: 'center', marginBottom: 8,

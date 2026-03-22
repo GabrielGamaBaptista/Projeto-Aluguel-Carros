@@ -35,12 +35,27 @@ export const PHOTO_ANGLE_LABELS = {
   motor: 'Motor',
 };
 
-// Helper: buscar tenantId a partir do carId
-const getTenantIdFromCar = async (carId) => {
+// Intervalos para geracao automatica de tarefas (Q9.8)
+const KM_UPDATE_INTERVAL_DAYS = 7;
+const KM_UPDATE_DEADLINE_DAYS = 3;
+const PHOTO_INSPECTION_INTERVAL_DAYS = 10;
+const PHOTO_INSPECTION_DEADLINE_DAYS = 5;
+const OIL_CHANGE_KM_INTERVAL = 10000;
+const OIL_CHANGE_DEADLINE_DAYS = 7;
+const MAINTENANCE_DEADLINE_DAYS = 7;
+
+// Rate-limit: evita chamadas duplicadas de generateAutomaticTasks no mesmo periodo (Q3.4)
+const _autoTaskLastRun = {}; // { [carId]: timestamp }
+const AUTO_TASK_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutos
+
+// Helper: buscar tenantId e landlordId a partir do carId (Q9.5)
+const getCarInfo = async (carId) => {
   try {
     const carDoc = await firestore().collection('cars').doc(carId).get();
-    return carDoc.exists ? carDoc.data().tenantId || null : null;
-  } catch { return null; }
+    if (!carDoc.exists) return { tenantId: null, landlordId: null };
+    const data = carDoc.data();
+    return { tenantId: data.tenantId || null, landlordId: data.landlordId || null };
+  } catch { return { tenantId: null, landlordId: null }; }
 };
 
 // Helper: formatar data para notificacao
@@ -73,8 +88,8 @@ export const tasksService = {
 
   createManualTask: async (carId, taskType, extraData = {}) => {
     try {
-      // Buscar tenantId para notificacao
-      const tenantId = await getTenantIdFromCar(carId);
+      // Buscar tenantId e landlordId para notificacao e indexacao (Q9.5)
+      const { tenantId, landlordId } = await getCarInfo(carId);
 
       // Due date: usar a fornecida pelo locador ou default 7 dias
       let dueDate;
@@ -94,6 +109,7 @@ export const tasksService = {
         dueDate,
         manualRequest: true,
         tenantId: tenantId || null,
+        landlordId: landlordId || null,
         ...extraData,
         dueDate, // Garantir que nao seja sobrescrito pelo spread
       };
@@ -150,6 +166,16 @@ export const tasksService = {
 
   createMaintenanceRequest: async (carId, requestedBy, description, maintenanceType) => {
     try {
+      // Buscar tenantId e landlordId do carro (Q2.1 + Q9.5)
+      const carDoc = await firestore().collection('cars').doc(carId).get();
+      const carData = carDoc.exists ? carDoc.data() : {};
+      const tenantId = carData.tenantId || null;
+      const landlordId = carData.landlordId || null;
+
+      // dueDate: +7 dias (Q2.2)
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() + MAINTENANCE_DEADLINE_DAYS);
+
       const docRef = await firestore().collection('tasks').add({
         carId,
         type: TASK_TYPES.MAINTENANCE,
@@ -157,26 +183,26 @@ export const tasksService = {
         description: description || 'O locatario solicita manutencao para este veiculo.',
         status: 'pending',
         createdAt: firestore.FieldValue.serverTimestamp(),
-        dueDate: firestore.Timestamp.fromDate(new Date()),
+        dueDate: firestore.Timestamp.fromDate(dueDate),
         requestedBy,
         requestedByRole: 'locatario',
         maintenanceType: maintenanceType || 'geral',
         manualRequest: true,
+        tenantId,
+        landlordId,
       });
 
       // Notificar o locador sobre pedido de manutencao
-      // Buscar landlordId a partir do carro
-      try {
-        const carDoc = await firestore().collection('cars').doc(carId).get();
-        if (carDoc.exists && carDoc.data().landlordId) {
+      if (landlordId) {
+        try {
           await notificationService.createNotification(
-            carDoc.data().landlordId,
+            landlordId,
             'Solicitacao de Manutencao',
             `O locatario solicitou manutencao: ${maintenanceType || 'geral'}. ${description}`,
             { taskId: docRef.id, carId, type: 'maintenance_request' }
           );
-        }
-      } catch (e) { console.error('Notif landlord error:', e); }
+        } catch (e) { console.error('Notif landlord error:', e); }
+      }
 
       return { success: true, id: docRef.id };
     } catch (error) {
@@ -188,28 +214,35 @@ export const tasksService = {
   // ===== GERACAO AUTOMATICA =====
 
   generateAutomaticTasks: async (carId, carData) => {
+    // Rate-limit: evita execucoes duplicadas dentro do cooldown (Q3.4)
+    const now = Date.now();
+    if (_autoTaskLastRun[carId] && (now - _autoTaskLastRun[carId]) < AUTO_TASK_COOLDOWN_MS) {
+      return { success: true, skipped: true };
+    }
+    _autoTaskLastRun[carId] = now;
+
     try {
-      const now = new Date();
+      const nowDate = new Date();
       let tasksGenerated = 0;
       const tenantId = carData.tenantId || null;
+      const landlordId = carData.landlordId || null;
 
-      // KM update a cada 10 dias
-      const lastKmUpdate = carData.lastKmUpdate?.toDate?.() || now;
-      const daysSinceKmUpdate = differenceInDays(now, lastKmUpdate);
-      if (daysSinceKmUpdate >= 10) {
+      // KM update a cada KM_UPDATE_INTERVAL_DAYS dias (Q9.8)
+      const lastKmUpdate = carData.lastKmUpdate?.toDate?.() || nowDate;
+      const daysSinceKmUpdate = differenceInDays(nowDate, lastKmUpdate);
+      if (daysSinceKmUpdate >= KM_UPDATE_INTERVAL_DAYS) {
         const hasPending = await tasksService._hasPendingTask(carId, TASK_TYPES.KM_UPDATE);
         if (!hasPending) {
           const dueDate = new Date();
-          dueDate.setDate(dueDate.getDate() + 3); // 3 dias para completar
+          dueDate.setDate(dueDate.getDate() + KM_UPDATE_DEADLINE_DAYS);
           const kmDocRef = await firestore().collection('tasks').add({
             carId, type: TASK_TYPES.KM_UPDATE,
             title: 'Atualizacao de Quilometragem',
-            description: 'Atualize a quilometragem do veiculo e envie foto do painel (tarefa automatica a cada 10 dias).',
+            description: `Atualize a quilometragem do veiculo e envie foto do painel (tarefa automatica a cada ${KM_UPDATE_INTERVAL_DAYS} dias).`,
             dueDate: firestore.Timestamp.fromDate(dueDate),
             status: 'pending', createdAt: firestore.FieldValue.serverTimestamp(), manualRequest: false,
-            tenantId,
+            tenantId, landlordId,
           });
-          // Notificar locatario
           if (tenantId) {
             await notificationService.createNotification(tenantId,
               'Atualizacao de Quilometragem',
@@ -221,22 +254,22 @@ export const tasksService = {
         }
       }
 
-      // Fotos a cada 15 dias
-      const lastPhotoInspection = carData.lastPhotoInspection?.toDate?.() || now;
-      const daysSincePhotos = differenceInDays(now, lastPhotoInspection);
-      if (daysSincePhotos >= 15) {
+      // Fotos a cada PHOTO_INSPECTION_INTERVAL_DAYS dias (Q9.8)
+      const lastPhotoInspection = carData.lastPhotoInspection?.toDate?.() || nowDate;
+      const daysSincePhotos = differenceInDays(nowDate, lastPhotoInspection);
+      if (daysSincePhotos >= PHOTO_INSPECTION_INTERVAL_DAYS) {
         const hasPending = await tasksService._hasPendingTask(carId, TASK_TYPES.PHOTO_INSPECTION);
         if (!hasPending) {
           const dueDate = new Date();
-          dueDate.setDate(dueDate.getDate() + 5); // 5 dias para completar
+          dueDate.setDate(dueDate.getDate() + PHOTO_INSPECTION_DEADLINE_DAYS);
           const photoDocRef = await firestore().collection('tasks').add({
             carId, type: TASK_TYPES.PHOTO_INSPECTION,
             title: 'Revisao Fotografica',
-            description: 'Envie fotos atualizadas do veiculo (tarefa automatica a cada 15 dias).',
+            description: `Envie fotos atualizadas do veiculo (tarefa automatica a cada ${PHOTO_INSPECTION_INTERVAL_DAYS} dias).`,
             dueDate: firestore.Timestamp.fromDate(dueDate),
             status: 'pending', requiredPhotos: REQUIRED_PHOTO_ANGLES, photosByAngle: {},
             createdAt: firestore.FieldValue.serverTimestamp(), manualRequest: false,
-            tenantId,
+            tenantId, landlordId,
           });
           if (tenantId) {
             await notificationService.createNotification(tenantId,
@@ -249,22 +282,22 @@ export const tasksService = {
         }
       }
 
-      // Troca de oleo a cada 10000km
+      // Troca de oleo a cada OIL_CHANGE_KM_INTERVAL km (Q9.8)
       const totalKm = carData.totalKm || 0;
       const lastOilChange = carData.lastOilChangeKm || 0;
       const kmSinceOilChange = totalKm - lastOilChange;
-      if (kmSinceOilChange >= 10000) {
+      if (kmSinceOilChange >= OIL_CHANGE_KM_INTERVAL) {
         const hasPending = await tasksService._hasPendingTask(carId, TASK_TYPES.OIL_CHANGE);
         if (!hasPending) {
           const dueDate = new Date();
-          dueDate.setDate(dueDate.getDate() + 7);
+          dueDate.setDate(dueDate.getDate() + OIL_CHANGE_DEADLINE_DAYS);
           const oilDocRef = await firestore().collection('tasks').add({
             carId, type: TASK_TYPES.OIL_CHANGE,
             title: 'Troca de Oleo',
             description: `Trocar oleo do motor (${kmSinceOilChange.toLocaleString()} km desde a ultima troca). Envie fotos do adesivo e recibo.`,
             dueDate: firestore.Timestamp.fromDate(dueDate),
             status: 'pending', createdAt: firestore.FieldValue.serverTimestamp(), manualRequest: false,
-            tenantId,
+            tenantId, landlordId,
           });
           if (tenantId) {
             await notificationService.createNotification(tenantId,
@@ -319,14 +352,54 @@ export const tasksService = {
 
   getAllUserTasks: async (userId, userRole, status = 'pending') => {
     try {
-      let carsQuery;
+      // Para locador: query otimizada por landlordId (Q9.5)
+      // Tasks novas tem landlordId; fallback para tasks antigas sem landlordId
       if (userRole === 'locador') {
-        carsQuery = firestore().collection('cars').where('landlordId', '==', userId);
-      } else {
-        carsQuery = firestore().collection('cars').where('tenantId', '==', userId);
+        const orderField = status === 'pending' ? 'dueDate' : 'completedAt';
+        const orderDir = status === 'pending' ? 'asc' : 'desc';
+        const newSnapshot = await firestore()
+          .collection('tasks')
+          .where('landlordId', '==', userId)
+          .where('status', '==', status)
+          .orderBy(orderField, orderDir)
+          .get();
+
+        if (!newSnapshot.empty) {
+          return { success: true, data: newSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) };
+        }
+
+        // Fallback: query por carId (tasks sem landlordId — tasks antigas)
+        const carsSnapshot = await firestore().collection('cars').where('landlordId', '==', userId).get();
+        const carIds = carsSnapshot.docs.map(doc => doc.id);
+        if (carIds.length === 0) return { success: true, data: [] };
+
+        const chunks = [];
+        for (let i = 0; i < carIds.length; i += 10) {
+          chunks.push(carIds.slice(i, i + 10));
+        }
+
+        let allTasks = [];
+        for (const chunk of chunks) {
+          const snapshot = await firestore()
+            .collection('tasks')
+            .where('carId', 'in', chunk)
+            .where('status', '==', status)
+            .get();
+          allTasks = allTasks.concat(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        }
+
+        allTasks.sort((a, b) => {
+          const field = status === 'completed' ? 'completedAt' : 'dueDate';
+          const dateA = a[field]?.toDate?.() || new Date(0);
+          const dateB = b[field]?.toDate?.() || new Date(0);
+          return status === 'completed' ? dateB - dateA : dateA - dateB;
+        });
+
+        return { success: true, data: allTasks };
       }
 
-      const carsSnapshot = await carsQuery.get();
+      // Para locatario: query por carId (chunks)
+      const carsSnapshot = await firestore().collection('cars').where('tenantId', '==', userId).get();
       const carIds = carsSnapshot.docs.map(doc => doc.id);
       if (carIds.length === 0) return { success: true, data: [] };
 
@@ -345,12 +418,11 @@ export const tasksService = {
         allTasks = allTasks.concat(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       }
 
-      // Ordenar client-side para evitar composite index
       allTasks.sort((a, b) => {
-          const field = status === 'completed' ? 'completedAt' : 'dueDate';
-          const dateA = a[field]?.toDate?.() || new Date(0);
-          const dateB = b[field]?.toDate?.() || new Date(0);
-          return status === 'completed' ? dateB - dateA : dateA - dateB;
+        const field = status === 'completed' ? 'completedAt' : 'dueDate';
+        const dateA = a[field]?.toDate?.() || new Date(0);
+        const dateB = b[field]?.toDate?.() || new Date(0);
+        return status === 'completed' ? dateB - dateA : dateA - dateB;
       });
 
       return { success: true, data: allTasks };
@@ -365,8 +437,10 @@ export const tasksService = {
   completeKmTask: async (taskId, carId, newKm, dashboardPhotoUrl) => {
     try {
       const carDoc = await firestore().collection('cars').doc(carId).get();
+      const carData = carDoc.exists ? carDoc.data() : {};
+
       if (carDoc.exists) {
-        const currentKm = carDoc.data().totalKm || 0;
+        const currentKm = carData.totalKm || 0;
         if (newKm < currentKm) {
           return { success: false, error: `A quilometragem (${newKm}) nao pode ser menor que a atual (${currentKm} km).` };
         }
@@ -387,7 +461,6 @@ export const tasksService = {
 
       // Notificar locador
       try {
-        const carData = carDoc.data();
         if (carData && carData.landlordId) {
           const carInfo = `${carData.brand} ${carData.model} (${carData.plate})`;
           await notificationService.createNotification(
@@ -399,20 +472,21 @@ export const tasksService = {
         }
       } catch (e) { console.error('Notif landlord km error:', e); }
 
-      // Verificar troca de oleo
-      const carData = carDoc.data();
+      // Verificar troca de oleo (Q2.1 + Q9.5: adicionar tenantId e landlordId)
       const lastOilKm = carData.lastOilChangeKm || 0;
-      if (newKm - lastOilKm >= 10000) {
+      if (newKm - lastOilKm >= OIL_CHANGE_KM_INTERVAL) {
         const hasPending = await tasksService._hasPendingTask(carId, TASK_TYPES.OIL_CHANGE);
         if (!hasPending) {
           const dueDate = new Date();
-          dueDate.setDate(dueDate.getDate() + 7);
+          dueDate.setDate(dueDate.getDate() + OIL_CHANGE_DEADLINE_DAYS);
           await firestore().collection('tasks').add({
             carId, type: TASK_TYPES.OIL_CHANGE,
             title: 'Troca de Oleo',
             description: `Trocar oleo do motor (${(newKm - lastOilKm).toLocaleString()} km desde a ultima troca).`,
             dueDate: firestore.Timestamp.fromDate(dueDate),
             status: 'pending', createdAt: firestore.FieldValue.serverTimestamp(), manualRequest: false,
+            tenantId: carData.tenantId || null,
+            landlordId: carData.landlordId || null,
           });
         }
       }
@@ -474,8 +548,10 @@ export const tasksService = {
   completeOilTask: async (taskId, carId, currentKm, stickerPhoto, receiptPhoto) => {
     try {
       const carDoc = await firestore().collection('cars').doc(carId).get();
+      const carData = carDoc.exists ? carDoc.data() : {};
+
       if (carDoc.exists) {
-        const carKm = carDoc.data().totalKm || 0;
+        const carKm = carData.totalKm || 0;
         if (currentKm < carKm) {
           return { success: false, error: `A quilometragem (${currentKm}) nao pode ser menor que a atual (${carKm} km).` };
         }
@@ -495,22 +571,24 @@ export const tasksService = {
         totalKm: currentKm,
       });
 
+      // Auto-gerar task de KM apos troca de oleo (Q2.1 + Q9.5: adicionar tenantId e landlordId)
       const hasPendingKm = await tasksService._hasPendingTask(carId, TASK_TYPES.KM_UPDATE);
       if (!hasPendingKm) {
         const dueDate = new Date();
-        dueDate.setDate(dueDate.getDate() + 3);
+        dueDate.setDate(dueDate.getDate() + KM_UPDATE_DEADLINE_DAYS);
         await firestore().collection('tasks').add({
           carId, type: TASK_TYPES.KM_UPDATE,
           title: 'Atualizacao de Quilometragem',
           description: 'Atualize a quilometragem apos a troca de oleo.',
           dueDate: firestore.Timestamp.fromDate(dueDate),
           status: 'pending', createdAt: firestore.FieldValue.serverTimestamp(), manualRequest: false,
+          tenantId: carData.tenantId || null,
+          landlordId: carData.landlordId || null,
         });
       }
 
       // Notificar locador
       try {
-        const carData = carDoc.data();
         if (carData && carData.landlordId) {
           const carInfo = `${carData.brand} ${carData.model} (${carData.plate})`;
           await notificationService.createNotification(
@@ -609,12 +687,11 @@ export const tasksService = {
         approvedAt: firestore.FieldValue.serverTimestamp(),
       });
 
-      // Notificar locatario
+      // Notificar locatario (Q10.3: usar import do topo, nao require inline)
       const taskDoc = await firestore().collection('tasks').doc(taskId).get();
       if (taskDoc.exists) {
         const task = taskDoc.data();
         if (task.tenantId) {
-          const { notificationService } = require('./notificationService');
           await notificationService.createNotification(
             task.tenantId,
             'Tarefa Aprovada',
@@ -642,12 +719,11 @@ export const tasksService = {
         completedAt: null,
       });
 
-      // Notificar locatario
+      // Notificar locatario (Q10.3: usar import do topo, nao require inline)
       const taskDoc = await firestore().collection('tasks').doc(taskId).get();
       if (taskDoc.exists) {
         const task = taskDoc.data();
         if (task.tenantId) {
-          const { notificationService } = require('./notificationService');
           await notificationService.createNotification(
             task.tenantId,
             'Correcao Solicitada',

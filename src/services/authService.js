@@ -164,6 +164,23 @@ export const authService = {
         });
       }
 
+      // Verificar unicidade de CPF/CNPJ e telefone (Q1.8)
+      if (userData.personType === 'pj' || userData.personType === 'mei') {
+        if (userData.cnpj) {
+          const cnpjCheck = await authService.checkDocumentExists(userData.cnpj, 'cnpj');
+          if (cnpjCheck.exists) return { success: false, error: 'Este CNPJ ja esta cadastrado.' };
+        }
+      } else {
+        if (userData.cpf) {
+          const cpfCheck = await authService.checkCpfExists(userData.cpf);
+          if (cpfCheck.exists) return { success: false, error: 'Este CPF ja esta cadastrado.' };
+        }
+      }
+      if (userData.phone) {
+        const phoneCheck = await authService.checkPhoneExists(userData.phone);
+        if (phoneCheck.exists) return { success: false, error: 'Este numero ja esta cadastrado.' };
+      }
+
       await firestore().collection('users').doc(userId).set(docData);
       return { success: true };
     } catch (error) { return { success: false, error: error.message }; }

@@ -1,5 +1,6 @@
 const { onRequest } = require('firebase-functions/v2/https');
 const admin = require('firebase-admin');
+const crypto = require('crypto');
 const { config } = require('../asaas/client');
 
 /**
@@ -24,7 +25,9 @@ exports.asaasWebhook = onRequest({ invoker: 'public', cors: false }, async (req,
     return res.status(500).send('Webhook token not configured');
   }
   const receivedToken = req.headers['asaas-access-token'];
-  if (!receivedToken || receivedToken !== webhookToken) {
+  const tokenBuffer = Buffer.from(webhookToken, 'utf8');
+  const receivedBuffer = Buffer.from(receivedToken || '', 'utf8');
+  if (!receivedToken || tokenBuffer.length !== receivedBuffer.length || !crypto.timingSafeEqual(tokenBuffer, receivedBuffer)) {
     console.warn('Webhook rejeitado: token invalido ou ausente.');
     return res.status(401).send('Unauthorized');
   }

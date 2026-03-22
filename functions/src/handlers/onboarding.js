@@ -102,11 +102,12 @@ exports.createAsaasSubaccount = onCall({ cors: true, invoker: 'public' }, async 
       postalCode: userData.cep,
       city: userData.city,
       state: userData.state,
-      incomeValue: 5000,
+      incomeValue: 10000,
       ...(isPf && userData.birthDate ? { birthDate: userData.birthDate } : {}),
     };
 
-    console.log('Criando subconta Asaas | uid:', uid, '| personType:', userData.personType, '| cpfCnpj:', cpfCnpj, '| name:', accountName);
+    const maskedCpfCnpj = cpfCnpj.length <= 4 ? '****' : cpfCnpj.slice(0, -4).replace(/./g, '*') + cpfCnpj.slice(-4);
+    console.log('Criando subconta Asaas | uid:', uid, '| personType:', userData.personType, '| cpfCnpj:', maskedCpfCnpj, '| name:', accountName);
 
     // 5. Chamar o módulo Asaas para criar a subconta
     const result = await createSubaccount(subaccountData);

@@ -199,4 +199,5 @@ export const MURAL_CATEGORIES = [
   { value: 'contato', label: 'Contatos Importantes' },
   { value: 'regras', label: 'Regras' },
   { value: 'aviso', label: 'Aviso' },
+  { value: 'urgente', label: 'Urgente' },
 ];

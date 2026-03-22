@@ -80,18 +80,15 @@ const paymentService = {
       const uid = auth().currentUser?.uid;
       if (!uid) return [];
 
-      // Filtra por landlordId (garante que a rule seja satisfeita na query)
-      // e filtra carId client-side para evitar composite index
+      // Query direta com carId (Q3.1 — usa indice composto landlordId+carId+dueDate)
       const snapshot = await firestore()
         .collection('charges')
         .where('landlordId', '==', uid)
+        .where('carId', '==', carId)
+        .orderBy('dueDate', 'desc')
         .get();
 
-      const charges = snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() }))
-        .filter(c => c.carId === carId);
-
-      return charges.sort((a, b) => new Date(b.dueDate) - new Date(a.dueDate));
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     } catch (error) {
       console.error('Error getting charges by car:', error);
       return [];

@@ -400,6 +400,8 @@ exports.sendPushNotification = onDocumentCreated(
     const { fcmToken } = userDoc.data();
     if (!fcmToken) {
       console.warn(`sendPushNotification: usuario ${userId} sem fcmToken. Notificacao "${title}" nao enviada.`);
+      // Deletar notificacao sem token — nao sera entregue (Q5.5)
+      try { await event.data.ref.delete(); } catch (e) {}
       return null;
     }
 
@@ -415,7 +417,8 @@ exports.sendPushNotification = onDocumentCreated(
           notification: { channelId: 'tarefas' },
         },
       });
-      await event.data.ref.update({ sent: true });
+      // Deletar apos entrega bem-sucedida (Q5.5 — nao ha tela de historico no app)
+      await event.data.ref.delete();
     } catch (err) {
       if (
         err.code === 'messaging/registration-token-not-registered' ||
@@ -428,6 +431,8 @@ exports.sendPushNotification = onDocumentCreated(
         }
       }
       console.error('Erro ao enviar push:', err.message);
+      // Deletar mesmo em caso de erro (Q5.5)
+      try { await event.data.ref.delete(); } catch (e) {}
     }
     return null;
   }
