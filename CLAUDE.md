@@ -60,13 +60,20 @@ date-fns                            (para differenceInDays em tasksService)
 │       │   ├── customers.js         # createOrGetCustomer
 │       │   └── payments.js          # createPayment, getPixQrCode
 │       ├── handlers/
-│       │   ├── onboarding.js        # createAsaasSubaccount (callable)
-│       │   ├── charges.js           # createCharge, generateRecurringCharges (cron)
-│       │   ├── contracts.js         # createContract (callable)
+│       │   ├── onboarding.js        # createAsaasSubaccount, checkOnboarding (callable)
+│       │   ├── charges.js           # createCharge, cancelCharge, editCharge, getPixQrCode, generateRecurringCharges (cron)
+│       │   ├── contracts.js         # createContract, cancelContract, editContract (callable)
 │       │   ├── webhooks.js          # asaasWebhook (onRequest — recebe eventos Asaas)
-│       │   └── cloudinarySign.js    # getCloudinarySignature (callable)
+│       │   ├── cloudinarySign.js    # getCloudinarySignature (callable)
+│       │   ├── notifications.js     # sendPushNotification (trigger onDocumentCreated)
+│       │   ├── taskNotifications.js # notifyOverdueTasks (scheduled)
+│       │   ├── tenantAssignment.js  # assignTenantCF (callable — Q1.4)
+│       │   └── carManagement.js     # deleteCarCF (callable — Q2.3)
+│       ├── scripts/
+│       │   └── apply-iam.js         # Aplica IAM policy pos-deploy (postdeploy hook)
 │       └── utils/
-│           └── validators.js
+│           ├── validators.js
+│           └── rateLimiter.js       # checkRateLimit — rate limiting via Firestore (Q1.10)
 ├── src/
 │   ├── config/
 │   │   ├── firebase.js              # export { auth, firestore, messaging }
@@ -202,6 +209,7 @@ date-fns                            (para differenceInDays em tasksService)
 {
   carId: string,
   tenantId: string | null,
+  landlordId: string | null,            // indexado para getAllUserTasks do locador (Q9.5)
   type: 'km_update' | 'photo_inspection' | 'oil_change' | 'maintenance',
   title: string,
   description: string,
@@ -274,7 +282,7 @@ date-fns                            (para differenceInDays em tasksService)
   landlordId: string,
   title: string,
   content: string,
-  category: 'geral' | 'aviso' | 'urgente',
+  category: 'geral' | 'pagamento' | 'contato' | 'regras' | 'aviso' | 'urgente',
   targetType: 'all' | 'specific',
   targetTenantId: string | null,    // se específico para um locatário
   targetCarId: string | null,       // se específico para um carro
@@ -401,7 +409,7 @@ Composite indexes são bem-vindos e recomendados quando melhoram a performance d
 firebase deploy --only firestore:indexes
 ```
 
-### Registro de Índices Compostos (13 ativos)
+### Registro de Índices Compostos (16 ativos)
 
 | Coleção | Campos | Usado em |
 |---------|--------|----------|
@@ -415,9 +423,12 @@ firebase deploy --only firestore:indexes
 | `tasks` | carId ↑ + status ↑ + dueDate ↑ | `getCarTasks` (pending, por prazo) |
 | `tasks` | carId ↑ + type ↑ + status ↑ | `_hasPendingTask` |
 | `tasks` | status ↑ + dueDate ↑ | `notifyOverdueTasks` (cron) |
+| `tasks` | landlordId ↑ + status ↑ + dueDate ↑ | `getAllUserTasks` locador pending (Q9.5) |
+| `tasks` | landlordId ↑ + status ↑ + completedAt ↓ | `getAllUserTasks` locador completed (Q9.5) |
 | `tenantRequests` | carId ↑ + status ↑ | `getSentRequests` |
 | `tenantRequests` | carId ↑ + tenantId ↑ + status ↑ | `createContract` (validação) |
 | `tenantRequests` | tenantId ↑ + status ↑ + createdAt ↓ | `getPendingRequests` |
+| `charges` | landlordId ↑ + carId ↑ + dueDate ↓ | `getChargesByCar` (Q3.1) |
 
 > **Manter esta tabela e o `firestore.indexes.json` atualizados** ao criar novos índices.
 > Exportar: `firebase firestore:indexes > firestore.indexes.json`
@@ -484,9 +495,9 @@ O sistema gera tarefas automaticamente baseado em intervalos:
 
 | Tipo | Intervalo | Prazo |
 |------|-----------|-------|
-| `km_update` | A cada **10 dias** sem atualização | 3 dias |
-| `photo_inspection` | A cada **15 dias** sem inspeção | 5 dias |
-| `oil_change` | A cada **10.000 km** rodados | 10 dias |
+| `km_update` | A cada **7 dias** sem atualização | 3 dias |
+| `photo_inspection` | A cada **10 dias** sem inspeção | 5 dias |
+| `oil_change` | A cada **10.000 km** rodados | 7 dias |
 
 A geração ocorre quando `generateAutomaticTasks(carId, carData)` é chamada (tipicamente ao abrir detalhes do carro). Só gera se não houver tarefa pendente do mesmo tipo para aquele carro.
 
@@ -512,7 +523,7 @@ Cada tipo tem formulário específico no TaskDetailsScreen:
 5. Locatário refaz e completa novamente
 
 ### Mural
-- Locador cria avisos com categorias: `geral`, `aviso`, `urgente`
+- Locador cria avisos com categorias: `geral`, `pagamento`, `contato`, `regras`, `aviso`, `urgente`
 - Pode direcionar: todos locatários, locatário específico, ou carro específico
 - Posts podem ser fixados (`pinned`)
 - Locatário vê posts do seu locador na HomeScreen
@@ -635,12 +646,28 @@ Eventos que geram notificações (salvas em `notifications/`):
 | `generateRecurringCharges` | Scheduled (cron diário 08h SP) | Gera cobranças recorrentes |
 | `asaasWebhook` | onRequest (HTTPS) | Recebe eventos de pagamento do Asaas |
 | `sendPushNotification` | onDocumentCreated (trigger) | Envia push via FCM ao criar em `notifications/` |
+| `notifyOverdueTasks` | Scheduled (cron diário) | Notifica tarefas vencidas |
+| `assignTenantCF` | Callable | Atribui locatário ao carro atomicamente (Q1.4) |
+| `deleteCarCF` | Callable | Exclui carro com cascade completo (Q2.3) |
 
 ### Push Notifications via Cloud Function
 - Trigger `sendPushNotification`: dispara ao criar qualquer documento em `notifications/{notifId}`
 - Busca `fcmToken` do `userId` destinatário e envia via `admin.messaging().send()`
 - Se token inválido (`registration-token-not-registered`), limpa `fcmToken` do usuário no Firestore
 - As notificações agora chegam como **push real** (não apenas salvas no Firestore)
+
+### Rate Limiting (Q1.10)
+- Todas as CFs callable têm rate limiting via `functions/src/utils/rateLimiter.js`
+- Usa transação Firestore em `rateLimits/{uid}_{action}` — janela fixa de 60s
+- Campo `ttlAt` nos documentos para configurar TTL policy no console (evita acúmulo)
+- `HttpsError('resource-exhausted')` quando excedido (HTTP 429)
+
+| CF | Limite por minuto |
+|----|-------------------|
+| `createCharge`, `getPixQrCode` | 30 |
+| `cancelCharge`, `editCharge` | 20 |
+| `createContractCF`, `cancelContract`, `editContract`, `assignTenantCF` | 10 |
+| `deleteCarCF` | 5 |
 
 ---
 

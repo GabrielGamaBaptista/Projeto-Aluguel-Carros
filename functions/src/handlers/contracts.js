@@ -2,6 +2,7 @@ const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const admin = require('firebase-admin');
 const { generateBatchCharges, _createChargeInternal, calcNextDueDate } = require('./charges');
 const { createSubaccountClient } = require('../asaas/client');
+const { checkRateLimit } = require('../utils/rateLimiter');
 
 /**
  * Cancela atomicamente um contrato ativo e todas as cobranças PENDING/OVERDUE.
@@ -11,6 +12,7 @@ exports.cancelContract = onCall({ cors: true, invoker: 'public' }, async (reques
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Usuario nao autenticado.');
   }
+  await checkRateLimit(request.auth.uid, 'cancelContract', 10, 60000);
 
   const { contractId, carId } = request.data;
 
@@ -174,6 +176,7 @@ exports.createContract = onCall({ cors: true, invoker: 'public' }, async (reques
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Usuario nao autenticado.');
   }
+  await checkRateLimit(request.auth.uid, 'createContractCF', 10, 60000);
 
   const { carId, tenantId, landlordId, rentAmount, frequency, startDate, nextDueDate, dayOfMonth, billingType, carInfo, tenantName, landlordName } = request.data;
 
@@ -305,5 +308,73 @@ exports.createContract = onCall({ cors: true, invoker: 'public' }, async (reques
     if (error instanceof HttpsError) throw error;
     console.error('Erro ao criar contrato:', error);
     throw new HttpsError('internal', 'Erro interno ao criar contrato.');
+  }
+});
+
+// ─── editContract ─────────────────────────────────────────────────────────────
+// Editar contrato: apenas rentAmount permanente
+exports.editContract = onCall({ cors: true, invoker: 'public' }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Usuario nao autenticado.');
+  }
+  await checkRateLimit(request.auth.uid, 'editContract', 10, 60000);
+
+  const { contractId, rentAmount } = request.data;
+
+  if (!contractId) {
+    throw new HttpsError('invalid-argument', 'contractId e obrigatorio.');
+  }
+  if (rentAmount == null) {
+    throw new HttpsError('invalid-argument', 'rentAmount e obrigatorio.');
+  }
+
+  const parsed = Number(rentAmount);
+  if (isNaN(parsed) || parsed <= 0) {
+    throw new HttpsError('invalid-argument', 'rentAmount deve ser um numero maior que zero.');
+  }
+
+  const db = admin.firestore();
+
+  try {
+    const contractDoc = await db.collection('rentalContracts').doc(contractId).get();
+    if (!contractDoc.exists) {
+      throw new HttpsError('not-found', 'Contrato nao encontrado.');
+    }
+
+    const contract = contractDoc.data();
+
+    if (request.auth.uid !== contract.landlordId) {
+      throw new HttpsError('permission-denied', 'Apenas o locador pode editar este contrato.');
+    }
+    if (!contract.active) {
+      throw new HttpsError('failed-precondition', 'Nao e possivel editar um contrato inativo.');
+    }
+
+    await db.collection('rentalContracts').doc(contractId).update({
+      rentAmount: parsed,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    // Notificar locatario sobre alteracao no contrato
+    try {
+      const formattedAmount = parsed.toFixed(2).replace('.', ',');
+      await db.collection('notifications').add({
+        userId: contract.tenantId,
+        title: `Contrato atualizado — ${contract.carInfo || ''}`,
+        body: `O valor do aluguel do veiculo ${contract.carInfo || ''} foi alterado para R$ ${formattedAmount}.`,
+        data: { type: 'contract_edited', contractId },
+        read: false,
+        sent: false,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (notifErr) {
+      console.error('Erro ao criar notificacao de edicao de contrato:', notifErr.message);
+    }
+
+    return { success: true };
+  } catch (error) {
+    if (error instanceof HttpsError) throw error;
+    console.error('Erro ao editar contrato:', error);
+    throw new HttpsError('internal', 'Erro interno. Tente novamente mais tarde.');
   }
 });

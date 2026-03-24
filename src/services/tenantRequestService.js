@@ -1,6 +1,7 @@
 // src/services/tenantRequestService.js
 import { firestore, auth } from '../config/firebase';
 import { notificationService } from './notificationService';
+import functions from '@react-native-firebase/functions';
 
 export const tenantRequestService = {
   // Enviar solicitacao de atribuicao
@@ -89,55 +90,14 @@ export const tenantRequestService = {
     }
   },
 
-  // Aceitar solicitacao
+  // Aceitar solicitacao — delega para Cloud Function assignTenantCF (Q1.4)
+  // A CF valida atomicamente: request pendente + carro disponivel + tenant sem carro
+  // e usa admin SDK para atribuir sem depender do Caso 3 das Firestore rules.
   acceptRequest: async (requestId) => {
     try {
-      const doc = await firestore().collection('tenantRequests').doc(requestId).get();
-      if (!doc.exists) return { success: false, error: 'Solicitacao nao encontrada.' };
-
-      const request = doc.data();
-      if (request.status !== 'pending') return { success: false, error: 'Solicitacao ja foi respondida.' };
-
-      // Atribuir locatario ao carro
-      const { carsService } = require('./carsService');
-      const assignResult = await carsService.assignTenant(request.carId, request.tenantId);
-      if (!assignResult.success) return assignResult;
-
-      // Atualizar status do request aceito
-      await firestore().collection('tenantRequests').doc(requestId).update({
-        status: 'accepted',
-        respondedAt: firestore.FieldValue.serverTimestamp(),
-      });
-
-      // Cancelar outras solicitacoes pendentes para o mesmo carro (nao-critico)
-      // O carro ja esta atribuido; outros requests nao podem ser aceitos de qualquer forma.
-      try {
-        const otherPending = await firestore().collection('tenantRequests')
-          .where('carId', '==', request.carId)
-          .where('landlordId', '==', request.landlordId)
-          .get();
-
-        const batch = firestore().batch();
-        otherPending.docs
-          .filter(d => d.id !== requestId && d.data().status === 'pending')
-          .forEach(d => {
-            batch.update(d.ref, { status: 'cancelled', respondedAt: firestore.FieldValue.serverTimestamp() });
-          });
-        await batch.commit();
-      } catch (cancelError) {
-        // Nao critico — o carro ja esta corretamente atribuido
-        console.warn('Nao foi possivel cancelar outros requests pendentes:', cancelError);
-      }
-
-      // Notificar locador
-      await notificationService.createNotification(
-        request.landlordId,
-        'Solicitacao Aceita',
-        `O locatario aceitou a atribuicao do carro ${request.carInfo}.`,
-        { type: 'request_accepted', carId: request.carId }
-      );
-
-      return { success: true };
+      const assignTenantFn = functions().httpsCallable('assignTenantCF');
+      const result = await assignTenantFn({ requestId });
+      return result.data;
     } catch (error) {
       console.error('Accept request error:', error);
       return { success: false, error: error.message };

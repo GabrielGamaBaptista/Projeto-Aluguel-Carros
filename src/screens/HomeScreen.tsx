@@ -137,7 +137,9 @@ const HomeScreen = ({ navigation }) => {
   const getCategoryColor = (val) => {
     switch (val) {
       case 'pagamento': return '#059669'; case 'contato': return '#2563EB';
-      case 'regras': return '#DC2626'; case 'aviso': return '#D97706'; default: return '#6B7280';
+      case 'regras': return '#DC2626'; case 'aviso': return '#D97706';
+      case 'urgente': return '#DC2626'; case 'geral': return '#4F46E5';
+      default: return '#6B7280';
     }
   };
   const formatPostDate = (ts) => {

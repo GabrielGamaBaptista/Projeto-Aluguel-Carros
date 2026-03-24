@@ -33,18 +33,22 @@ const getStatusLabel = (status: string) => {
   }
 };
 
-const STATUS_ORDER: Record<string, number> = {
-  OVERDUE: 0,
-  PENDING: 1,
-  CONFIRMED: 2,
-  RECEIVED: 3,
-  REFUNDED: 4,
-  CANCELLED: 5,
+const getChargeOrder = (c: any): number => {
+  const isAvulsa = !c.contractId;
+  const s = c.status;
+  if (s === 'CANCELLED') return 6;
+  if (isAvulsa && s === 'OVERDUE') return 0;
+  if (isAvulsa && s === 'PENDING') return 1;
+  if (!isAvulsa && s === 'OVERDUE') return 2;
+  if (!isAvulsa && s === 'PENDING') return 3;
+  if (!isAvulsa && (s === 'RECEIVED' || s === 'CONFIRMED')) return 4;
+  if (isAvulsa && (s === 'RECEIVED' || s === 'CONFIRMED')) return 5;
+  return 7;
 };
 
 const sortCharges = (list: any[]) =>
   [...list].sort((a, b) => {
-    const orderDiff = (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9);
+    const orderDiff = getChargeOrder(a) - getChargeOrder(b);
     if (orderDiff !== 0) return orderDiff;
     return (a.dueDate || '').localeCompare(b.dueDate || '');
   });

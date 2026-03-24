@@ -36,11 +36,12 @@ service cloud.firestore {
     //
     // Criacao: apenas o locador — que se define como landlordId do documento.
     //
-    // Atualizacao (3 casos):
+    // Atualizacao (2 casos):
     //   1. Locador: pode atualizar qualquer campo, mas nao pode mudar landlordId.
     //   2. Locatario atribuido: pode atualizar apenas campos de km/foto/oleo.
-    //   3. Locatario sem carro: pode se auto-atribuir a carro disponivel
-    //      (flow de aceite de solicitacao via tenantRequestService.acceptRequest).
+    //
+    // Atribuicao de locatario: feita EXCLUSIVAMENTE via Cloud Function assignTenantCF
+    // (admin SDK bypassa estas rules). O Caso 3 de auto-atribuicao foi removido (Q1.4).
     //
     // Delecao: apenas o locador dono.
     match /cars/{carId} {
@@ -65,21 +66,6 @@ service cloud.firestore {
                 .affectedKeys()
                 .hasOnly(['totalKm', 'lastKmUpdate', 'lastPhotoInspection',
                           'lastInspectionPhotos', 'lastOilChangeKm', 'updatedAt']))
-
-        ||
-
-        // Caso 3: locatario auto-atribui a carro disponivel (aceitar solicitacao)
-        // Permite setar tenantId/status/rentedAt em carro sem locatario.
-        // Restricao: status resultante DEVE ser 'rented' (evita que tenant defina valores arbitrarios).
-        // Limitacao conhecida: nao verifica existencia de tenantRequest aceito (IDs sao auto-gerados).
-        //   Recomendacao futura: mover carsService.assignTenant() para Cloud Function.
-        (resource.data.tenantId == null
-          && resource.data.status == 'available'
-          && request.resource.data.diff(resource.data)
-                .affectedKeys()
-                .hasOnly(['tenantId', 'status', 'rentedAt'])
-          && request.resource.data.tenantId == request.auth.uid
-          && request.resource.data.status == 'rented')
       );
 
       allow delete: if request.auth != null
@@ -101,6 +87,7 @@ service cloud.firestore {
     match /tasks/{taskId} {
       allow read: if request.auth != null && (
         resource.data.tenantId == request.auth.uid
+        || resource.data.landlordId == request.auth.uid
         || carData(resource.data.carId).landlordId == request.auth.uid
         || carData(resource.data.carId).tenantId == request.auth.uid
       );
@@ -249,8 +236,7 @@ service cloud.firestore {
         && request.resource.data.userId is string
         && request.resource.data.read == false
         && request.resource.data.sent == false
-        && request.resource.data.createdAt == request.time
-        && request.resource.data.userId != request.auth.uid;
+        && request.resource.data.createdAt == request.time;
 
       allow update: if request.auth != null
         && resource.data.userId == request.auth.uid
@@ -327,6 +313,12 @@ service cloud.firestore {
 
       allow delete: if request.auth != null
         && resource.data.landlordId == request.auth.uid;
+    }
+
+    // Rate limit counters: acesso exclusivo via Cloud Functions (Admin SDK).
+    // Client-side nunca deve ler ou escrever nesta colecao.
+    match /rateLimits/{docId} {
+      allow read, write: if false;
     }
 
     // Categorias custom de despesas: apenas o locador dono.

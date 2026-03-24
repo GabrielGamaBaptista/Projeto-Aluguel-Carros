@@ -43,6 +43,7 @@ const PHOTO_INSPECTION_DEADLINE_DAYS = 5;
 const OIL_CHANGE_KM_INTERVAL = 10000;
 const OIL_CHANGE_DEADLINE_DAYS = 7;
 const MAINTENANCE_DEADLINE_DAYS = 7;
+const MANUAL_TASK_DEFAULT_DEADLINE_DAYS = 7; // prazo padrao quando locador nao especifica
 
 // Rate-limit: evita chamadas duplicadas de generateAutomaticTasks no mesmo periodo (Q3.4)
 const _autoTaskLastRun = {}; // { [carId]: timestamp }
@@ -97,7 +98,7 @@ export const tasksService = {
         dueDate = firestore.Timestamp.fromDate(extraData.dueDate);
       } else {
         const defaultDue = new Date();
-        defaultDue.setDate(defaultDue.getDate() + 7);
+        defaultDue.setDate(defaultDue.getDate() + MANUAL_TASK_DEFAULT_DEADLINE_DAYS);
         dueDate = firestore.Timestamp.fromDate(defaultDue);
       }
 
@@ -352,42 +353,43 @@ export const tasksService = {
 
   getAllUserTasks: async (userId, userRole, status = 'pending') => {
     try {
-      // Para locador: query otimizada por landlordId (Q9.5)
-      // Tasks novas tem landlordId; fallback para tasks antigas sem landlordId
+      // Para locador: merge entre tasks novas (com landlordId) e tasks antigas (sem landlordId)
+      // Ambas as queries sao sempre executadas para nao ocultar tasks antigas (Q9.5)
       if (userRole === 'locador') {
-        const orderField = status === 'pending' ? 'dueDate' : 'completedAt';
-        const orderDir = status === 'pending' ? 'asc' : 'desc';
+        // Query 1: tasks novas indexadas por landlordId
         const newSnapshot = await firestore()
           .collection('tasks')
           .where('landlordId', '==', userId)
           .where('status', '==', status)
-          .orderBy(orderField, orderDir)
           .get();
 
-        if (!newSnapshot.empty) {
-          return { success: true, data: newSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) };
-        }
+        // Map de tasks novas para deduplicacao
+        const taskMap = new Map(newSnapshot.docs.map(doc => [doc.id, { id: doc.id, ...doc.data() }]));
 
-        // Fallback: query por carId (tasks sem landlordId — tasks antigas)
+        // Query 2: tasks antigas por carId (sem landlordId)
         const carsSnapshot = await firestore().collection('cars').where('landlordId', '==', userId).get();
         const carIds = carsSnapshot.docs.map(doc => doc.id);
-        if (carIds.length === 0) return { success: true, data: [] };
 
-        const chunks = [];
-        for (let i = 0; i < carIds.length; i += 10) {
-          chunks.push(carIds.slice(i, i + 10));
+        if (carIds.length > 0) {
+          const chunks = [];
+          for (let i = 0; i < carIds.length; i += 10) {
+            chunks.push(carIds.slice(i, i + 10));
+          }
+          for (const chunk of chunks) {
+            const snapshot = await firestore()
+              .collection('tasks')
+              .where('carId', 'in', chunk)
+              .where('status', '==', status)
+              .get();
+            for (const doc of snapshot.docs) {
+              if (!taskMap.has(doc.id)) {
+                taskMap.set(doc.id, { id: doc.id, ...doc.data() });
+              }
+            }
+          }
         }
 
-        let allTasks = [];
-        for (const chunk of chunks) {
-          const snapshot = await firestore()
-            .collection('tasks')
-            .where('carId', 'in', chunk)
-            .where('status', '==', status)
-            .get();
-          allTasks = allTasks.concat(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        }
-
+        const allTasks = [...taskMap.values()];
         allTasks.sort((a, b) => {
           const field = status === 'completed' ? 'completedAt' : 'dueDate';
           const dateA = a[field]?.toDate?.() || new Date(0);

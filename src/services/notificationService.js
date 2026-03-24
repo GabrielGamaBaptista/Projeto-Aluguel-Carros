@@ -200,7 +200,8 @@ export const notificationService = {
         fcmTokenUpdatedAt: firestore.FieldValue.serverTimestamp(),
       });
     } catch (error) {
-      console.error('Erro ao remover FCM token:', error);
+      // Silencioso — pode falhar quando chamado apos signOut (auth ja revogado)
+      // O token e limpo antes do signOut em authService.logout()
     }
   },
 

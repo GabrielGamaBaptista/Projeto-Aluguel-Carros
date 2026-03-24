@@ -175,3 +175,28 @@ exports.createAsaasSubaccount = onCall({ cors: true, invoker: 'public' }, async 
     throw new HttpsError('internal', 'Erro ao processar criacao de subconta.');
   }
 });
+
+// ─── checkOnboarding ──────────────────────────────────────────────────────────
+// Verificar se locador ja tem subconta Asaas — lido server-side para nao expor apiKey ao cliente
+exports.checkOnboarding = onCall({ cors: true, invoker: 'public' }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Usuario nao autenticado.');
+  }
+
+  const uid = request.auth.uid;
+
+  try {
+    const doc = await admin.firestore().collection('asaasAccounts').doc(uid).get();
+    if (!doc.exists) {
+      return { exists: false };
+    }
+    if (doc.data().isCreating === true) {
+      return { exists: false, creating: true };
+    }
+    const d = doc.data();
+    return { exists: true, status: d.status, accountId: d.asaasAccountId, walletId: d.walletId };
+  } catch (error) {
+    console.error('Erro ao verificar onboarding:', error);
+    throw new HttpsError('internal', 'Erro interno. Tente novamente mais tarde.');
+  }
+});

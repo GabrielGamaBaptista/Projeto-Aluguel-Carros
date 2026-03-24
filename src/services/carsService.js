@@ -3,6 +3,7 @@ import { firestore } from '../config/firebase';
 import { tasksService } from './tasksService';
 import paymentService from './paymentService';
 import { notificationService } from './notificationService';
+import functions from '@react-native-firebase/functions';
 
 export const carsService = {
   addCar: async (carData) => {
@@ -36,11 +37,12 @@ export const carsService = {
     }
   },
 
+  // Exclusao com cascade completo via Cloud Function (Q2.3)
   deleteCar: async (carId) => {
     try {
-      await tasksService.deleteTasksByCar(carId);
-      await firestore().collection('cars').doc(carId).delete();
-      return { success: true };
+      const deleteCarFn = functions().httpsCallable('deleteCarCF');
+      const result = await deleteCarFn({ carId });
+      return result.data;
     } catch (error) {
       console.error('Delete car error:', error);
       return { success: false, error: error.message };
@@ -108,27 +110,8 @@ export const carsService = {
     }
   },
 
-  assignTenant: async (carId, tenantId) => {
-    try {
-      // Verificar se locatario ja tem carro
-      const check = await carsService.checkTenantHasCar(tenantId, carId);
-      if (check.hasCar) {
-        return {
-          success: false,
-          error: `Este locatario ja esta atribuido ao carro ${check.carInfo}. Cada locatario so pode ter um carro.`,
-        };
-      }
-      await firestore().collection('cars').doc(carId).update({
-        tenantId: tenantId,
-        status: 'rented',
-        rentedAt: firestore.FieldValue.serverTimestamp(),
-      });
-      return { success: true };
-    } catch (error) {
-      console.error('Assign tenant error:', error);
-      return { success: false, error: error.message };
-    }
-  },
+  // assignTenant removido — funcionalidade movida para Cloud Function assignTenantCF (Q1.4)
+  // Chamada via tenantRequestService.acceptRequest()
 
   removeTenant: async (carId) => {
     try {

@@ -145,7 +145,8 @@ export const authService = {
       const docData = {
         email: user.email, name: userData.name || user.displayName || '',
         role: userData.role, phone: userData.phone || '',
-        emailVerified: true, authProvider: 'google', googlePhotoUrl: user.photoURL || '',
+        emailVerified: true, emailVerifiedAt: firestore.FieldValue.serverTimestamp(),
+        authProvider: 'google', googlePhotoUrl: user.photoURL || '',
         cpf: userData.cpf || '', birthDate: userData.birthDate || '',
         personType: userData.personType || 'pf',
         cnpj: userData.cnpj || '', companyName: userData.companyName || '',
@@ -265,6 +266,16 @@ export const authService = {
 
   logout: async () => {
     try {
+      // Limpar FCM token ANTES do signOut (enquanto request.auth ainda e valido)
+      const uid = auth().currentUser?.uid;
+      if (uid) {
+        try {
+          await firestore().collection('users').doc(uid).update({
+            fcmToken: null,
+            fcmTokenUpdatedAt: firestore.FieldValue.serverTimestamp(),
+          });
+        } catch (e) {}
+      }
       if (GoogleSignin) { try { await GoogleSignin.signOut(); } catch (e) {} }
       await auth().signOut();
       return { success: true };

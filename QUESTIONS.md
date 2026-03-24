@@ -42,12 +42,16 @@ O Firestore rule "Caso 3" permite que qualquer locatario se auto-atribua a qualq
 
 **Resposta**:**BUG**, corrija. mas novamente se atente para não quebrar o funcionamento da aplicação
 
+> ✅ **IMPLEMENTADO — v1.18.0** — `assignTenantCF` criada; self-assignment eliminado; Caso 3 das rules removido.
+
 ---
 
 ### Q1.5 — Webhook token comparado com `!==` (vulneravel a timing attack)
 Em `webhooks.js` linha 27, o token e comparado com `!==`. Isso e vulneravel a timing attacks. Deveria usar `crypto.timingSafeEqual()` para comparacao de strings sensiveis.
 
 **Resposta**:**MELHORIA** use crypto.timingSafeEqual.
+
+> ✅ **IMPLEMENTADO — v1.17.0** — `crypto.timingSafeEqual()` aplicado em `webhooks.js`.
 
 ---
 
@@ -67,12 +71,16 @@ Linha 109 de `onboarding.js` loga `cpfCnpj` em plaintext nos logs do Cloud Funct
 
 **Resposta**:**MELHORIA**
 
+> ✅ **IMPLEMENTADO — v1.17.0** — CPF/CNPJ mascarado nos logs do `onboarding.js`.
+
 ---
 
 ### Q1.8 — `completeGoogleProfile` nao verifica unicidade de CPF/telefone
 Diferente de `register()`, o metodo `completeGoogleProfile()` (linha 141) nao checa se o CPF ou telefone ja estao em uso antes de criar o documento. Um usuario Google pode registrar um CPF duplicado.
 
 **Resposta**:**BUG** corrija. é indispensável a unicidade do cpf.
+
+> ✅ **IMPLEMENTADO — v1.17.0** — `completeGoogleProfile` verifica unicidade de CPF e telefone antes de criar documento.
 
 ---
 
@@ -90,6 +98,8 @@ As Cloud Functions callable (createCharge, editCharge, cancelCharge, etc.) nao t
 
 **Resposta**:**BUG** defina um rate limiting, mas lembre-se de fazer condizente com nossas regras de negócio, quando geramos uma cobrança recorrente por semana, por exemplo, 5 cobranças podem ser geradas de uma vez.
 
+> ✅ **IMPLEMENTADO — v1.18.0** — `rateLimiter.js` via Firestore; janela fixa 60s; 9 CFs protegidas (30/20/10/5 req/min conforme risco).
+
 ---
 
 ### Q1.11 — Cloudinary cloud name hardcoded, sem folder organization
@@ -106,6 +116,8 @@ Em `tasksService.completeOilTask()` (linhas 502-508), a task de KM gerada automa
 
 **Resposta**:**bug**
 
+> ✅ **IMPLEMENTADO — v1.17.0** — tasks geradas automaticamente por `completeOilTask`/`completeKmTask` agora incluem `tenantId` e `landlordId`.
+
 ---
 
 ### Q2.2 — `createMaintenanceRequest` define `dueDate` como hoje (imediatamente vencida)
@@ -115,6 +127,8 @@ Em `tasksService.createMaintenanceRequest()` (linha 160), o `dueDate` e `new Dat
 
 **Resposta**:**bug**, use um prazo padrão de 7 dias.
 
+> ✅ **IMPLEMENTADO — v1.17.0** — `dueDate` de tarefas de manutenção definido como hoje + 7 dias (`MAINTENANCE_DEADLINE_DAYS = 7`).
+
 ---
 
 ### Q2.3 — `deleteCar` nao verifica contratos ou cobrancas ativas
@@ -123,6 +137,8 @@ Em `tasksService.createMaintenanceRequest()` (linha 160), o `dueDate` e `new Dat
 **Sugestao**: Chamar `cancelActiveContractByCar` antes de deletar, ou bloquear a delecao se houver contrato ativo.
 
 **Resposta**:**bug** deletar o carro dele deletar tudo antes, contrato, cobrança avulsa, task, tudo.
+
+> ✅ **IMPLEMENTADO — v1.18.0** — `deleteCarCF` com cascade completo: cancela contrato+cobranças no Asaas, deleta tasks, tenantRequests, mural posts, despesas e contratos.
 
 ---
 
@@ -154,6 +170,8 @@ O cron (charges.js linhas 376-462) processa TODOS os contratos ativos com `Promi
 
 **Resposta**:**melhoria**
 
+> ✅ **IMPLEMENTADO — v1.18.0** — Batches de 5 contratos com `Promise.allSettled` e delay de 1.5s entre batches.
+
 ---
 
 ### Q2.8 — Nenhum idempotency key para pagamentos no Asaas
@@ -161,12 +179,16 @@ O cron (charges.js linhas 376-462) processa TODOS os contratos ativos com `Promi
 
 **Resposta**:**bug**
 
+> ✅ **IMPLEMENTADO — v1.17.0** — `X-Idempotency-Key` adicionado em `createPayment()` usando `contractId_dueDate` ou UUID aleatório.
+
 ---
 
 ### Q2.9 — MURAL_CATEGORIES diverge do schema documentado
 O `muralService.js` exporta categorias: `geral, pagamento, contato, regras, aviso`. Mas o CLAUDE.md documenta: `geral | aviso | urgente`. A categoria `urgente` (que deveria existir e provavelmente ter destaque visual diferenciado) esta ausente. As categorias `pagamento`, `contato`, `regras` nao estao no schema.
 
 **Resposta**:**bug** adicione a categoria urgente no sistema, e adicione as outras categorias a documentação (lembre-se de não utilizar emojis se for utilizar algum icone para urgência)
+
+> ✅ **IMPLEMENTADO — v1.17.0** — Categoria `urgente` adicionada; badge colorido por categoria no `MuralManagerScreen`.
 
 ---
 
@@ -200,6 +222,8 @@ Firestore batches tem limite de 500 operacoes. Se um carro tiver mais de 500 tas
 
 **Resposta**:**melhoria** faça, mas faça utilizando indices compostos, se julgar mais performático. não se atenha a regra de evita-los
 
+> ✅ **IMPLEMENTADO — v1.17.0** — índice composto `landlordId + carId + dueDate` criado; `getChargesByCar` usa `orderBy` no Firestore.
+
 ---
 
 ### Q3.2 [CRITICO] — Nenhuma paginacao em nenhuma tela de listagem
@@ -229,6 +253,8 @@ Cada abertura de detalhes de um carro triggera `generateAutomaticTasks`, que faz
 
 **Resposta**:**melhoria** nao executar se ja rodou nos ultimos 5 minutos
 
+> ✅ **IMPLEMENTADO — v1.17.0** — cooldown de 5 min por carro em `generateAutomaticTasks` (`_autoTaskLastRun` + `AUTO_TASK_COOLDOWN_MS`).
+
 ---
 
 ### Q3.5 — FinancialDataContext recarrega TUDO a cada refresh
@@ -252,7 +278,9 @@ O `PhotoPicker` nao parece comprimir imagens antes de enviar para o Cloudinary. 
 
 **Sugestao**: Usar a opcao `maxWidth`/`maxHeight`/`quality` do `react-native-image-picker` para redimensionar antes do upload.
 
-**Resposta**:**melhoria** 
+**Resposta**:**melhoria**
+
+> ✅ **IMPLEMENTADO — v1.18.0** — `maxWidth: 1920, maxHeight: 1920` adicionados em ambas as opções do `PhotoPicker` (câmera + galeria).
 
 ---
 
@@ -273,6 +301,8 @@ O `index.js` das Cloud Functions contem implementacoes completas de `cancelCharg
 **Sugestao**: Mover `cancelCharge` e `editCharge` para `handlers/charges.js`, `editContract` para `handlers/contracts.js`, `sendPushNotification` para um novo `handlers/notifications.js`, etc.
 
 **Resposta**:**melhoria**, lembre-se de documentar tudo isso após feito.
+
+> ✅ **IMPLEMENTADO — v1.18.0** — `index.js` refatorado de 514 linhas para ~45; 6 funções inline movidas para handlers correspondentes.
 
 ---
 
@@ -362,6 +392,8 @@ A regra de "1 carro por locatario" e verificada em `carsService.checkTenantHasCa
 
 **Resposta**:**BUG** já disse isso em outra questão mais acima. ao deletar um carro tudo sobre ele deve ser apagado, contrato, cobranças, tasks, registros, tudo.
 
+> ✅ **IMPLEMENTADO — v1.18.0** — coberto pela `deleteCarCF` (Q2.3): deleta tasks, contratos, cobranças, mural posts e despesas.
+
 ---
 
 ### Q5.3 — Nao ha fluxo para editar dados sensiveis (CPF, CNH, endereco)
@@ -387,6 +419,8 @@ A colecao `notifications` cresce indefinidamente. Nao ha mecanismo para limpar n
 
 **Resposta**:**bug** me corrija se eu estiver errado, mas eu não preciso guardar registro de notificações que já foram enviadas, e recebidas pelo destinatário designado, por mim faria sentido as notificações durarem o tempo que necessitarem para serem enviadas, e assim que recebidas já podem ser apagadas.
 
+> ✅ **IMPLEMENTADO — v1.17.0** — `sendPushNotification` deleta o documento de `notifications/` após o envio push bem-sucedido (ou falha).
+
 ---
 
 ### Q5.6 — Nao ha notificacao deep-link (tap na notificacao nao navega)
@@ -395,6 +429,8 @@ Quando o usuario toca em uma notificacao push, o app abre mas NAO navega para a 
 **Sugestao**: Usar os `data` da notificacao (type, carId, taskId, chargeId) para navegar para a tela correta.
 
 **Resposta**:**SUPER_MELHORIA**, isto é algo que já estava pensando, e sinto muita falta no aplicativo. faz total diferença o usuário clicar numa notificação de cobrança prestes a expirar e ser levado direto para a tela com o qrcode, por exemplo.
+
+> ✅ **IMPLEMENTADO — v1.16.0** — deep-link implementado; tap na notificação navega para a tela relevante (cobrança, tarefa, etc.).
 
 ---
 
@@ -417,6 +453,8 @@ O `nextChargeOverride` (override pontual de valor) so e consumido no path MONTHL
 
 **Resposta**:**bug**, não entendi muito bem o questionamento, mas vou detalhar a regra de qualquer forma. o contrato de recorrencia pode gerar cobranças mensais, quinzenais ou semanais. e a função para alterar a próxima cobrança(que na prática apaga a anterior e gera uma nova) sempre irá substituir a próxima cobrança com status pendente(ordenando por dueDate em ordem crescente) seja essa cobrança semanal, quinzenal ou mensal.
 
+> ✅ **IMPLEMENTADO — v1.18.0** — `nextChargeOverride` agora consumido pelo cron em WEEKLY (primeira do lote) e BIWEEKLY. O `editCharge` (substituição direta de pendente) já funcionava para todas as frequências e permanece intacto.
+
 ---
 
 ### Q5.10 — Sem validacao de formato/dados do carro no AddCarScreen
@@ -430,6 +468,8 @@ Os campos brand, model, year, plate, color, initialKm aparentemente nao tem vali
 O valor de renda mensal enviado ao Asaas e sempre R$ 5.000 (onboarding.js linha 105). Isso pode causar problemas se o Asaas usar esse valor para limites de transacao. Deveria ser um campo preenchido pelo locador?
 
 **Resposta**:**melhoria**, deixe 10000 como padrão. o locatário pode alterar depois se precisar.
+
+> ✅ **IMPLEMENTADO — v1.17.0** — `incomeValue` alterado para 10000 em `onboarding.js`.
 
 ---
 
@@ -448,6 +488,8 @@ O MEMORY.md documenta que `roles/run.invoker` precisa ser aplicado manualmente a
 **Sugestao**: Automatizar via script post-deploy no `codemagic.yaml` ou `firebase.json` postdeploy hook.
 
 **Resposta**:**melhoria** automatize com firebase.json se possível, não com codemagic.
+
+> ✅ **IMPLEMENTADO — v1.18.0** — `functions/scripts/apply-iam.js` + hook `"postdeploy"` no `firebase.json`; IAM aplicado automaticamente após cada deploy.
 
 ---
 
@@ -495,6 +537,8 @@ O `notificationService` handler de foreground (linha 63) usa `Alert.alert` do Re
 
 **Resposta**:**SUPER_MELHORIA**, é horrível receber um pop-up enorme na tela no meio do uso devido a notificação. durante o uso do app a react-native-flash-message, ou uma própria notificação(no mesmo modelo que aparece quando o usuário está fora do app) seria melhor.
 
+> ✅ **IMPLEMENTADO — v1.16.0** — banner foreground via `react-native-flash-message`; substituiu o `Alert.alert` intrusivo.
+
 ---
 
 ### Q7.2 — Loading states sem skeleton screens
@@ -515,6 +559,8 @@ Algumas telas tem pull-to-refresh (HomeScreen, TenantPaymentsScreen), mas outras
 Acoes como "Remover Locatario", "Cancelar Contrato", "Deletar Carro" deveriam ter confirmacao com dialog. Existem confirms em todas essas acoes?
 
 **Resposta**:**bug**"Deletar Carro" tem um alert; "Cancelar Contrato", além de não ter nada, eu não tenho um botão na aba de detalhamento do contrato para Cancelar, e deveria ter. "Remover Locatario" também ter um alert na tela com alguns avisos.
+
+> ✅ **IMPLEMENTADO — v1.17.0** — botão "Cancelar Contrato" adicionado em `ContractDetailsScreen` com Alert de confirmação; confirmações presentes em todas as ações destrutivas.
 
 ---
 
@@ -567,6 +613,8 @@ Algumas datas sao `Timestamp` do Firestore (createdAt, dueDate em tasks), outras
 **Sugestao**: Padronizar: Timestamps para datas com hora, strings "YYYY-MM-DD" para datas sem hora.
 
 **Resposta**:**SUPER_MELHORIA** quero TODAS as datas do aplicativo no formato "DD/MM/AAAA". e de preferencia se for pro usúario inserir, com máscara. me incomoda muito inconsistência entre os formatos.
+
+> ✅ **IMPLEMENTADO — v1.16.0** — datas exibidas em "DD/MM/AAAA" em toda a UI do app.
 
 ---
 
@@ -623,6 +671,8 @@ Atualmente, para buscar tasks de um locador, e necessario primeiro buscar seus c
 
 **Resposta**:**melhoria** adicione. o ganho de performance será notável.
 
+> ✅ **IMPLEMENTADO — v1.17.0** — `landlordId` adicionado a todos os documentos de tasks; `getAllUserTasks` usa query direta por `landlordId`.
+
 ---
 
 ### Q9.6 — Considerar sub-colecoes para escalabilidade
@@ -645,6 +695,8 @@ Documentos como `tenantRequests` (status: rejected/cancelled), `notifications` a
 Valores como `10000` (km para troca de oleo), `10` (dias para KM update), `15` (dias para foto), `7` (prazo de oil change), `5` (dias de antecedencia do cron mensal) estao hardcoded no service. Poderiam ser configurados por locador ou globalmente em um documento de config no Firestore.
 
 **Resposta**:**melhoria** não quero que o locador configure, mas quero que ele seja informado de alguma forma, ao criar uma conta por exemplo, dessas informações. além disso quero mudar a (dias para KM update) para 7 dias, e (dias para foto) para 10 dias.
+
+> ✅ **IMPLEMENTADO — v1.17.0** — constantes extraídas em `tasksService.js` (`KM_UPDATE_INTERVAL_DAYS=7`, `PHOTO_INSPECTION_INTERVAL_DAYS=10`); intervalos ajustados conforme solicitado.
 
 ---
 
@@ -681,12 +733,16 @@ Mas o nome `lastDayOfNextMonth` e enganoso — deveria ser `lastDayOfTargetMonth
 
 **Resposta**: **intencional** não me parece um edge case, mas renomeie para fazer sentido tomando cuidado de renomear em todos os lugares que é mencionado.
 
+> ✅ **IMPLEMENTADO — v1.17.0** — renomeado para `lastDayOfTargetMonth` em `charges.js`.
+
 ---
 
 ### Q10.3 — `approveTask` e `requestRevision` fazem require inline
 Em `tasksService.approveTask()` (linha 617) e `requestRevision()` (linha 651), `notificationService` e importado com `require()` inline em vez de usar o import do topo do arquivo (que ja existe na linha 4). Isso e intencional (circular dependency?) ou um descuido?
 
 **Resposta**: **bug** acredito ser um descuido.
+
+> ✅ **IMPLEMENTADO — v1.17.0** — `notificationService` usa o import do topo do arquivo em `approveTask` e `requestRevision`.
 
 ---
 

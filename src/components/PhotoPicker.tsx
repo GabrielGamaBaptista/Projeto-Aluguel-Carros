@@ -47,6 +47,8 @@ const PhotoPicker = ({ onPhotoSelected, label, currentPhotoUrl }) => {
     const result = await launchCamera({
       mediaType: 'photo',
       quality: 0.8,
+      maxWidth: 1920,
+      maxHeight: 1920,
       saveToPhotos: true,
     });
 
@@ -64,6 +66,8 @@ const PhotoPicker = ({ onPhotoSelected, label, currentPhotoUrl }) => {
     const result = await launchImageLibrary({
       mediaType: 'photo',
       quality: 0.8,
+      maxWidth: 1920,
+      maxHeight: 1920,
     });
 
     if (result.didCancel) return;
