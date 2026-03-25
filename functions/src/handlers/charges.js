@@ -20,12 +20,16 @@ const _createChargeInternal = async (data) => {
   }
   const landlordApiKey = landlordAccountDoc.data().apiKey;
 
-  // 2. Buscar os dados do locatario
+  // 2. Buscar os dados do locatario (doc publico + private/data para CPF/phone)
   const tenantDoc = await admin.firestore().collection('users').doc(tenantId).get();
   if (!tenantDoc.exists) {
     throw new Error(`Dados do locatario ${tenantId} nao encontrados.`);
   }
-  const tenantData = tenantDoc.data();
+  const tenantPrivateDoc = await admin.firestore().collection('users').doc(tenantId)
+    .collection('private').doc('data').get();
+  const tenantPrivateData = tenantPrivateDoc.exists ? tenantPrivateDoc.data() : {};
+  // Merge: private sobrescreve publico para campos PII (cpf, phone, etc.)
+  const tenantData = { ...tenantDoc.data(), ...tenantPrivateData };
 
   // 3. Obter ou criar o customer na subconta do locador
   const asaasCustomerId = await createOrGetCustomer(landlordApiKey, {

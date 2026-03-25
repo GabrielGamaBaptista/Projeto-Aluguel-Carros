@@ -17,7 +17,8 @@ const TenantDetailsScreen = ({ route }) => {
   useEffect(() => { loadTenant(); }, []);
 
   const loadTenant = async () => {
-    const result = await usersService.getUserById(tenantId);
+    // Usa CF getTenantDetailsCF para ler PII do locatario de forma segura (Q1.2)
+    const result = await usersService.getTenantDetails(tenantId);
     if (result.success) setTenant(result.data);
     setLoading(false);
   };

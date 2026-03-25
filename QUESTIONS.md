@@ -24,6 +24,9 @@ As Firestore rules de `users` permitem `allow read: if request.auth != null`. Is
 
 **Resposta**:**MELHORIA**, implemente, mas tenha cuidado para não quebrar o funcionamento atual do app. tenho tido péssimas experiencias ao tentar alterar as firestole rules pois o app sempre tem quebrado.
 
+> **IMPLEMENTADO** (batch 3, v1.20.0): PII movido para `users/{uid}/private/data`. Fase A (escrita dupla): campos sensiveis escritos em ambos os docs, leitores migrados. CF `getTenantDetailsCF` criada para leitura cross-user do locador. Script `functions/scripts/migrate-pii.js` para usuarios existentes. Fase C (batch 4): remover PII do doc publico.
+> **FIX pos-teste**: `getTenantDetailsCF` nao incluia `profilePhoto` na whitelist — corrigido e redeploy feito. `handleSaveAddress` no ProfileScreen agora deleta campos de endereco legados do doc publico via `FieldValue.delete()` ao salvar (migracao automatica para usuarios pre-Q1.2). `completeGoogleProfile` agora salva `profilePhoto` no doc publico.
+
 ---
 
 ### Q1.3 [CRITICO] — Qualquer usuario autenticado pode criar notificacoes para qualquer outro usuario
@@ -235,6 +238,9 @@ Nenhuma lista (tasks, charges, contracts, mural, notifications) implementa pagin
 
 **Resposta**:**melhoria**
 
+> **IMPLEMENTADO** (batch 3, v1.20.0): Paginacao (limit 20 + startAfter) nas listas de maior crescimento: `getAllUserTasks` (completed, locador), `getTenantChargesPaginated`. TasksScreen e TenantPaymentsScreen com `onEndReached`. Indice `charges.tenantId + dueDate DESC` criado. Listas de baixo risco (carros, mural, contratos) nao paginadas.
+> **FIX pos-teste**: Ordenacao de pagamentos do locatario ajustada: pendentes/vencidas primeiro (dueDate ASC), depois pagas recorrentes (contractId != null, dueDate DESC), depois pagas avulsas (dueDate DESC).
+
 ---
 
 ### Q3.3 — `getAllUserTasks` faz N+1 queries (1 para cars + N/10 para tasks)
@@ -401,6 +407,9 @@ O ProfileScreen mostra dados do usuario mas nao permite editar CPF, CNH ou ender
 
 **Resposta**:**melhoria** adicione edição para os dados que ainda não possuem no profile.
 
+> **IMPLEMENTADO** (batch 3, v1.20.0): ProfileScreen expandido com 5 secoes editaveis independentes — Dados da Conta (ja existia), Dados Pessoais (CPF/data/personType/CNPJ), Endereco (CEP autocomplete ViaCEP), CNH (locatario), Comprovante de residencia (locatario). CPF bloqueado para locador com subconta Asaas ativa. Batch write atomico: campos publicos (CPF/CNPJ) em users/{uid}; PII (endereco, CNH, fotos) apenas em private/data.
+> **FIX pos-teste**: Upload de fotos no cadastro (RegisterScreen) estava quebrado pois Firebase Auth so e criado no ultimo step — corrigido com upload diferido: `PhotoPicker deferred` armazena URI local; apos `authService.register()` criar a conta, uploads sao feitos autenticados e URLs salvas via batch. Corrigido para foto de perfil (doc publico) e CNH/comprovante (private/data). Camera no Android exigia permissao em runtime — adicionado `PermissionsAndroid.request(CAMERA)` antes de `launchCamera`.
+
 ---
 
 ### Q5.4 — Nao ha fluxo de delecao de conta (LGPD)
@@ -409,6 +418,8 @@ Usuarios nao podem deletar suas contas. A LGPD (Lei Geral de Protecao de Dados) 
 **Sugestao**: Implementar um fluxo de delecao que: cancele contratos ativos, desatribua carros, anonimize dados ou delete documentos.
 
 **Resposta**:**melhoria** adicione esta função. quero que o usuário possa deletar sua conta e todas as informações, fotos, tasks, carros, tudo relacionado a ele seja deletado junto.
+
+> **IMPLEMENTADO** (batch 3, v1.20.0): CF `deleteAccountCF` com cascade completo por role. LOCADOR: cancela contratos/cobranças no Asaas, notifica locatarios, deleta carros/tasks/mural/charges/contratos/notifications, deleta asaasAccounts/{uid}. LOCATARIO: cancela contratos/cobranças, libera carros, notifica locadores, anonimiza charges (tenantId='deleted_user') e rentalContracts (tenantName='Usuario Excluido'). ProfileScreen: botao "Excluir Conta" na secao Seguranca com confirmacao dupla (Alert + modal) e re-autenticacao (email: senha / Google: re-sign-in) antes da exclusao.
 
 ---
 
@@ -445,6 +456,8 @@ O locatario pode ver cobrancas na aba Pagamentos, mas nao tem acesso ao `Contrac
 Apos o pagamento de uma cobranca, nao ha opcao de gerar ou baixar um recibo/comprovante. O Asaas pode fornecer isso via `invoiceUrl`, mas nao esta sendo apresentado de forma clara apos o pagamento.
 
 **Resposta**:**melhoria**, gostaria sim que após paga a cobrança o locatário pudesse acessar a cobrança e caso já paga, pudesse verificar/baixar o comprobante de pagamento. gostaria inclusive que esse comprovante ficasse disponível também para o locador, nas cobranças já pagas.
+
+> **IMPLEMENTADO** (batch 3, v1.20.0): `PaymentDetailsScreen` exibe secao "Comprovante de Pagamento" para charges RECEIVED/CONFIRMED. Se `transactionReceiptUrl` existe, botao "Ver Comprovante" abre URL via `Linking.openURL`. Disponivel para locatario e locador (ambos acessam PaymentDetailsScreen). Webhook ja preenchia `transactionReceiptUrl` desde batch anterior.
 
 ---
 
@@ -552,6 +565,8 @@ Todas as telas usam `ActivityIndicator` simples durante carregamento. Skeleton s
 Algumas telas tem pull-to-refresh (HomeScreen, TenantPaymentsScreen), mas outras (TasksScreen, MuralManagerScreen, tabs do FinancialDashboard) podem nao ter. Consistencia de UX e importante.
 
 **Resposta**:**melhoria** todas as telas com listagem de dados, que utilizam webhook, que puxam informações em "tempo real" devem ter pull to refresh.
+
+> **IMPLEMENTADO** (batch 3, v1.20.0): Todas as telas com listagem possuem pull-to-refresh: HomeScreen, TenantPaymentsScreen, TasksScreen (com reset de paginacao), MuralManagerScreen, CobrancasTab, ContratosTab, ResumoTab.
 
 ---
 

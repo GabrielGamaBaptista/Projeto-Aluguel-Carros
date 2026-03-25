@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  RefreshControl, SectionList, ScrollView, StatusBar,
+  RefreshControl, SectionList, ScrollView, StatusBar, ActivityIndicator,
 } from 'react-native';
 import { Gauge, Camera, Droplets, Wrench, ClipboardList, CheckCircle2 } from 'lucide-react-native';
 import { authService } from '../services/authService';
@@ -20,6 +20,10 @@ const TasksScreen = ({ navigation }) => {
   const [carsMap, setCarsMap] = useState({});
   const [tenantsMap, setTenantsMap] = useState({});
   const [selectedCarFilter, setSelectedCarFilter] = useState('all');
+  // Paginacao de tasks concluidas (Q3.2)
+  const [completedLastDoc, setCompletedLastDoc] = useState(null);
+  const [completedHasMore, setCompletedHasMore] = useState(false);
+  const [loadingMoreCompleted, setLoadingMoreCompleted] = useState(false);
 
   useEffect(() => { loadTasks(); }, []);
   useEffect(() => {
@@ -61,17 +65,50 @@ const TasksScreen = ({ navigation }) => {
       setTenantsMap(tMap);
     }
 
-    // Pendentes + Concluidas
+    // Pendentes (sem paginacao — dataset pequeno)
     const pendR = await tasksService.getAllUserTasks(currentUser.uid, profileResult.data.role, 'pending');
     if (pendR.success) setTasks(pendR.data);
 
-    const compR = await tasksService.getAllUserTasks(currentUser.uid, profileResult.data.role, 'completed');
-    if (compR.success) setCompletedTasks(compR.data);
+    // Concluidas — primeira pagina (paginadas)
+    const compR = await tasksService.getAllUserTasks(currentUser.uid, profileResult.data.role, 'completed', { pageSize: 20 });
+    if (compR.success) {
+      setCompletedTasks(compR.data);
+      setCompletedLastDoc(compR.lastDoc || null);
+      setCompletedHasMore(compR.hasMore || false);
+    }
 
     setLoading(false);
   };
 
-  const onRefresh = async () => { setRefreshing(true); await loadTasks(); setRefreshing(false); };
+  const loadMoreCompleted = async () => {
+    if (!completedHasMore || loadingMoreCompleted) return;
+    const currentUser = authService.getCurrentUser();
+    if (!currentUser || !userProfile) return;
+    setLoadingMoreCompleted(true);
+    const compR = await tasksService.getAllUserTasks(
+      currentUser.uid, userProfile.role, 'completed',
+      { pageSize: 20, startAfter: completedLastDoc }
+    );
+    if (compR.success) {
+      // Adicionar sem duplicar (dedup por id)
+      setCompletedTasks(prev => {
+        const existingIds = new Set(prev.map(t => t.id));
+        const newTasks = compR.data.filter(t => !existingIds.has(t.id));
+        return [...prev, ...newTasks];
+      });
+      setCompletedLastDoc(compR.lastDoc || null);
+      setCompletedHasMore(compR.hasMore || false);
+    }
+    setLoadingMoreCompleted(false);
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    setCompletedLastDoc(null);
+    setCompletedHasMore(false);
+    await loadTasks();
+    setRefreshing(false);
+  };
 
   const getTaskIcon = (type) => {
     const color = getTaskColor(type);
@@ -140,7 +177,9 @@ const TasksScreen = ({ navigation }) => {
       }
       groups[key].data.push(task);
     });
-    return Object.values(groups);
+    return Object.values(groups).sort((a, b) =>
+      `${a.title} ${a.plate}`.localeCompare(`${b.title} ${b.plate}`)
+    );
   };
 
   const renderTaskItem = ({ item }) => {
@@ -267,6 +306,13 @@ const TasksScreen = ({ navigation }) => {
         renderSectionHeader={renderSectionHeader}
         contentContainerStyle={styles.list}
         stickySectionHeadersEnabled={false}
+        onEndReached={activeTab === 'completed' ? loadMoreCompleted : undefined}
+        onEndReachedThreshold={0.3}
+        ListFooterComponent={
+          loadingMoreCompleted
+            ? <ActivityIndicator size="small" color="#4F46E5" style={{ marginVertical: 16 }} />
+            : null
+        }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             {activeTab === 'pending'

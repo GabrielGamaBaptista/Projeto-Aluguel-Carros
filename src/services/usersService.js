@@ -1,5 +1,8 @@
 // src/services/usersService.js
 import { firestore } from '../config/firebase';
+import functions from '@react-native-firebase/functions';
+
+const fn = () => functions();
 
 export const usersService = {
   // Obter todos os locatários disponíveis
@@ -33,6 +36,19 @@ export const usersService = {
       }
     } catch (error) {
       console.error('Get user error:', error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  // Obter dados completos (publico + PII) de um locatario via Cloud Function segura (Q1.2).
+  // Apenas o locador de um carro atribuido ao locatario pode chamar.
+  getTenantDetails: async (tenantId) => {
+    try {
+      const getTenantDetailsFn = fn().httpsCallable('getTenantDetailsCF');
+      const result = await getTenantDetailsFn({ tenantId });
+      return result.data;
+    } catch (error) {
+      console.error('Get tenant details error:', error);
       return { success: false, error: error.message };
     }
   },

@@ -120,6 +120,41 @@ const paymentService = {
   },
 
   /**
+   * Fetches charges for the current tenant with cursor-based pagination (Q3.2).
+   * Requires index: charges | tenantId ASC + dueDate DESC.
+   * @param {object} [opts]
+   * @param {number} [opts.pageSize=20]
+   * @param {DocumentSnapshot|null} [opts.startAfter=null]
+   * @returns {Promise<{data: Array, lastDoc: DocumentSnapshot|null, hasMore: boolean}>}
+   */
+  getTenantChargesPaginated: async ({ pageSize = 20, startAfter = null } = {}) => {
+    try {
+      const uid = auth().currentUser?.uid;
+      if (!uid) throw new Error('User not authenticated');
+
+      let query = firestore()
+        .collection('charges')
+        .where('tenantId', '==', uid)
+        .orderBy('dueDate', 'desc')
+        .limit(pageSize);
+
+      if (startAfter) {
+        query = query.startAfter(startAfter);
+      }
+
+      const snapshot = await query.get();
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const lastDoc = snapshot.docs[snapshot.docs.length - 1] || null;
+      const hasMore = snapshot.docs.length === pageSize;
+
+      return { data, lastDoc, hasMore };
+    } catch (error) {
+      console.error('Error getting tenant charges paginated:', error);
+      return { data: [], lastDoc: null, hasMore: false };
+    }
+  },
+
+  /**
    * Calls the Cloud Function to get the Pix QR Code for a charge.
    * @param {string} chargeId - The Asaas charge ID.
    * @returns {Promise<{encodedImage: string, payload: string}>}

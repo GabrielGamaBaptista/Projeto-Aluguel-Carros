@@ -9,9 +9,12 @@ service cloud.firestore {
 
     // ─── users ────────────────────────────────────────────────────────────
     // Leitura: qualquer autenticado (necessario para busca de locatarios,
-    //          detalhes de tenant, notificacoes, etc.)
-    // Nota conhecida: PII (CPF, CNH) exposta a usuarios autenticados.
-    //   Mitigacao futura: mover dados sensiveis para sub-colecao com acesso restrito.
+    //          notificacoes, etc.). O doc publico contem apenas dados nao-sensiveis.
+    //
+    // PII (telefone, CNH, endereco, etc.) fica em users/{uid}/private/data,
+    //   acessivel apenas pelo proprio usuario ou via Cloud Functions (admin SDK).
+    //   Leituras cross-user de PII (ex: TenantDetailsScreen) sao feitas via
+    //   Cloud Function getTenantDetailsCF que valida autorizacao.
     //
     // Escrita: apenas o proprio usuario, com protecao de campos criticos:
     //   - 'role' nao pode ser alterado (previne escalada de privilegio)
@@ -29,6 +32,15 @@ service cloud.firestore {
               .hasAny(['role', 'email', 'authProvider', 'createdAt']);
 
       allow delete: if false;
+
+      // Sub-colecao private: apenas o proprio usuario pode ler/escrever.
+      // Delecao bloqueada client-side — apenas admin SDK (Cloud Functions).
+      match /private/{docId} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow create: if request.auth != null && request.auth.uid == userId;
+        allow update: if request.auth != null && request.auth.uid == userId;
+        allow delete: if false;
+      }
     }
 
     // ─── cars ─────────────────────────────────────────────────────────────

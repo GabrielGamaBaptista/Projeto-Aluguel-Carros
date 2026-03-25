@@ -49,5 +49,13 @@ exports.assignTenantCF = tenantAssignment.assignTenant;
 const carManagement = require('./src/handlers/carManagement');
 exports.deleteCarCF = carManagement.deleteCarCF;
 
+// Perfil de usuario — leitura cross-user de PII via CF segura (Q1.2)
+const userProfile = require('./src/handlers/userProfile');
+exports.getTenantDetailsCF = userProfile.getTenantDetailsCF;
+
 // Tasks
 exports.notifyOverdueTasks = taskNotifications.notifyOverdueTasks;
+
+// Exclusao de conta com cascade LGPD (Q5.4)
+const accountDeletion = require('./src/handlers/accountDeletion');
+exports.deleteAccountCF = accountDeletion.deleteAccountCF;

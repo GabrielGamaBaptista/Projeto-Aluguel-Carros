@@ -32,6 +32,10 @@ const SERVICES = [
   // Adicionados nesta sessao (Q1.4 e Q2.3):
   'assigntenantcf',
   'deletecarcf',
+  // Adicionados no batch 3 (Q1.2):
+  'gettenantdetailscf',
+  // Adicionados no batch 3 (Q5.4):
+  'deleteaccountcf',
 ];
 
 function getAccessToken() {

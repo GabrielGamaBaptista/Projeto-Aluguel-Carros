@@ -351,39 +351,60 @@ export const tasksService = {
     }
   },
 
-  getAllUserTasks: async (userId, userRole, status = 'pending') => {
+  // Busca tasks do usuario com suporte a paginacao para tasks concluidas (Q3.2).
+  // Parametros opcionais: pageSize (padrao 20), startAfter (cursor Firestore para proxima pagina).
+  // Retorna: { success, data, lastDoc, hasMore }
+  // - lastDoc: ultimo DocumentSnapshot da query paginada (para proxima chamada)
+  // - hasMore: true se ha mais paginas disponiveis
+  //
+  // COMPORTAMENTO DE PAGINACAO (locador, status=completed):
+  //   startAfter=null (1a pagina): busca tasks legacy (todas, sem landlordId) + primeiras `pageSize` tasks novas
+  //   startAfter!=null (paginas seguintes): apenas proximas `pageSize` tasks novas (legacy ja carregadas)
+  getAllUserTasks: async (userId, userRole, status = 'pending', { pageSize = 20, startAfter = null } = {}) => {
     try {
       // Para locador: merge entre tasks novas (com landlordId) e tasks antigas (sem landlordId)
-      // Ambas as queries sao sempre executadas para nao ocultar tasks antigas (Q9.5)
       if (userRole === 'locador') {
-        // Query 1: tasks novas indexadas por landlordId
-        const newSnapshot = await firestore()
+        const orderField = status === 'completed' ? 'completedAt' : 'dueDate';
+        const orderDir = status === 'completed' ? 'desc' : 'asc';
+
+        // Query 1: tasks novas indexadas por landlordId (paginada)
+        let newQuery = firestore()
           .collection('tasks')
           .where('landlordId', '==', userId)
           .where('status', '==', status)
-          .get();
+          .orderBy(orderField, orderDir)
+          .limit(pageSize);
+        if (startAfter) {
+          newQuery = newQuery.startAfter(startAfter);
+        }
+        const newSnapshot = await newQuery.get();
 
-        // Map de tasks novas para deduplicacao
         const taskMap = new Map(newSnapshot.docs.map(doc => [doc.id, { id: doc.id, ...doc.data() }]));
+        const lastDoc = newSnapshot.docs[newSnapshot.docs.length - 1] || null;
+        const hasMore = newSnapshot.docs.length === pageSize;
 
-        // Query 2: tasks antigas por carId (sem landlordId)
-        const carsSnapshot = await firestore().collection('cars').where('landlordId', '==', userId).get();
-        const carIds = carsSnapshot.docs.map(doc => doc.id);
+        // Query 2: tasks legacy por carId (sem landlordId) — apenas na primeira pagina.
+        // Aplica limit(pageSize) por chunk para evitar download irrestrito em contas antigas.
+        if (!startAfter) {
+          const carsSnapshot = await firestore().collection('cars').where('landlordId', '==', userId).get();
+          const carIds = carsSnapshot.docs.map(doc => doc.id);
 
-        if (carIds.length > 0) {
-          const chunks = [];
-          for (let i = 0; i < carIds.length; i += 10) {
-            chunks.push(carIds.slice(i, i + 10));
-          }
-          for (const chunk of chunks) {
-            const snapshot = await firestore()
-              .collection('tasks')
-              .where('carId', 'in', chunk)
-              .where('status', '==', status)
-              .get();
-            for (const doc of snapshot.docs) {
-              if (!taskMap.has(doc.id)) {
-                taskMap.set(doc.id, { id: doc.id, ...doc.data() });
+          if (carIds.length > 0) {
+            const chunks = [];
+            for (let i = 0; i < carIds.length; i += 10) {
+              chunks.push(carIds.slice(i, i + 10));
+            }
+            for (const chunk of chunks) {
+              const snapshot = await firestore()
+                .collection('tasks')
+                .where('carId', 'in', chunk)
+                .where('status', '==', status)
+                .limit(pageSize)
+                .get();
+              for (const doc of snapshot.docs) {
+                if (!taskMap.has(doc.id)) {
+                  taskMap.set(doc.id, { id: doc.id, ...doc.data() });
+                }
               }
             }
           }
@@ -391,19 +412,18 @@ export const tasksService = {
 
         const allTasks = [...taskMap.values()];
         allTasks.sort((a, b) => {
-          const field = status === 'completed' ? 'completedAt' : 'dueDate';
-          const dateA = a[field]?.toDate?.() || new Date(0);
-          const dateB = b[field]?.toDate?.() || new Date(0);
+          const dateA = a[orderField]?.toDate?.() || new Date(0);
+          const dateB = b[orderField]?.toDate?.() || new Date(0);
           return status === 'completed' ? dateB - dateA : dateA - dateB;
         });
 
-        return { success: true, data: allTasks };
+        return { success: true, data: allTasks, lastDoc, hasMore };
       }
 
-      // Para locatario: query por carId (chunks)
+      // Para locatario: query por carId (sem paginacao — max 1 carro, dataset pequeno)
       const carsSnapshot = await firestore().collection('cars').where('tenantId', '==', userId).get();
       const carIds = carsSnapshot.docs.map(doc => doc.id);
-      if (carIds.length === 0) return { success: true, data: [] };
+      if (carIds.length === 0) return { success: true, data: [], lastDoc: null, hasMore: false };
 
       const chunks = [];
       for (let i = 0; i < carIds.length; i += 10) {
@@ -427,7 +447,7 @@ export const tasksService = {
         return status === 'completed' ? dateB - dateA : dateA - dateB;
       });
 
-      return { success: true, data: allTasks };
+      return { success: true, data: allTasks, lastDoc: null, hasMore: false };
     } catch (error) {
       console.error('Get all tasks error:', error);
       return { success: false, error: error.message };

@@ -5,8 +5,10 @@ import {
   ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
 import { Building2, User, ClipboardList } from 'lucide-react-native';
+import firestore from '@react-native-firebase/firestore';
 import { authService } from '../services/authService';
 import PhotoPicker from '../components/PhotoPicker';
+import { uploadImageToCloudinary } from '../config/cloudinary';
 import {
   validateCpf, validateCnpj, validateEmail, validateDate, validatePhone,
   validatePassword, sanitizeText, fetchAddressByCep, formatCep,
@@ -241,17 +243,61 @@ const RegisterScreen = ({ navigation }) => {
       cep: cep.replace(/\D/g, ''), street: sanitizeText(street), number: sanitizeText(number),
       complement: sanitizeText(complement), neighborhood: sanitizeText(neighborhood),
       city: sanitizeText(city), state, address: fullAddress,
-      profilePhoto: profilePhoto || null,
+      // Foto de perfil e diferida — enviada apos a conta ser criada (usuario autenticado)
+      profilePhoto: null,
     };
     if (role === 'locatario') {
       userData.cnhNumber = cnhNumber.replace(/\D/g, '');
       userData.cnhCategory = cnhCategory.toUpperCase().trim();
       userData.cnhExpiry = cnhExpiry;
-      userData.cnhFrontPhoto = cnhFrontPhoto;
-      userData.cnhBackPhoto = cnhBackPhoto;
-      userData.residenceProofPhoto = residenceProofPhoto;
+      userData.cnhFrontPhoto = '';
+      userData.cnhBackPhoto = '';
+      userData.residenceProofPhoto = '';
     }
     const result = await authService.register(email.trim().toLowerCase(), password, userData);
+
+    // Apos criar conta (usuario agora autenticado), faz upload das fotos diferidas
+    if (result.success) {
+      const uid = result.user.uid;
+      // profilePhoto vai para o doc publico; CNH/comprovante vao para private/data
+      const publicUploads: { key: string; uri: string }[] = [];
+      const privateUploads: { key: string; uri: string }[] = [];
+      if (profilePhoto) publicUploads.push({ key: 'profilePhoto', uri: profilePhoto });
+      if (role === 'locatario') {
+        if (cnhFrontPhoto) privateUploads.push({ key: 'cnhFrontPhoto', uri: cnhFrontPhoto });
+        if (cnhBackPhoto) privateUploads.push({ key: 'cnhBackPhoto', uri: cnhBackPhoto });
+        if (residenceProofPhoto) privateUploads.push({ key: 'residenceProofPhoto', uri: residenceProofPhoto });
+      }
+      if (publicUploads.length > 0 || privateUploads.length > 0) {
+        const publicUpdates: Record<string, string> = {};
+        const privateUpdates: Record<string, string> = {};
+        await Promise.all([...publicUploads, ...privateUploads].map(async ({ key, uri }) => {
+          const up = await uploadImageToCloudinary(uri);
+          if (up.success) {
+            if (publicUploads.some(u => u.key === key)) publicUpdates[key] = up.url;
+            else privateUpdates[key] = up.url;
+          } else {
+            console.warn(`[RegisterScreen] Falha ao enviar ${key}:`, up.error);
+          }
+        }));
+        try {
+          const batch = firestore().batch();
+          if (Object.keys(publicUpdates).length > 0) {
+            batch.update(firestore().collection('users').doc(uid), publicUpdates);
+          }
+          if (Object.keys(privateUpdates).length > 0) {
+            batch.update(
+              firestore().collection('users').doc(uid).collection('private').doc('data'),
+              privateUpdates
+            );
+          }
+          await batch.commit();
+        } catch (e) {
+          console.error('[RegisterScreen] Erro ao salvar URLs das fotos:', e);
+        }
+      }
+    }
+
     setLoading(false);
     if (result.success) {
       await authService.logout();
@@ -287,6 +333,7 @@ const RegisterScreen = ({ navigation }) => {
         label="Foto de Perfil (opcional)"
         onPhotoSelected={setProfilePhoto}
         currentPhotoUrl={profilePhoto}
+        deferred
       />
       <View style={styles.field}><Text style={styles.label}>Nome Completo *</Text>
         <TextInput style={[styles.input, errors.name && styles.inputError]} placeholder="Seu nome completo" placeholderTextColor="#9CA3AF" value={name} onChangeText={(t) => { setName(t); clearError('name'); }} autoCapitalize="words" maxLength={100} /><ErrorText field="name" /></View>
@@ -404,10 +451,10 @@ const RegisterScreen = ({ navigation }) => {
           <TextInput style={[styles.input, errors.cnhExpiry && styles.inputError]} placeholder="DD/MM/AAAA" placeholderTextColor="#9CA3AF" value={cnhExpiry} onChangeText={(t) => { setCnhExpiry(formatDate(t)); clearError('cnhExpiry'); }} keyboardType="numeric" /><ErrorText field="cnhExpiry" /></View>
       </View>
       <Text style={styles.sectionLabel}>Foto CNH - Frente *</Text>
-      <PhotoPicker label="Frente da CNH" onPhotoSelected={setCnhFrontPhoto} currentPhotoUrl={cnhFrontPhoto} />
+      <PhotoPicker label="Frente da CNH" onPhotoSelected={setCnhFrontPhoto} currentPhotoUrl={cnhFrontPhoto} deferred />
       <ErrorText field="cnhFront" />
       <Text style={styles.sectionLabel}>Foto CNH - Verso *</Text>
-      <PhotoPicker label="Verso da CNH" onPhotoSelected={setCnhBackPhoto} currentPhotoUrl={cnhBackPhoto} />
+      <PhotoPicker label="Verso da CNH" onPhotoSelected={setCnhBackPhoto} currentPhotoUrl={cnhBackPhoto} deferred />
       <ErrorText field="cnhBack" />
     </View>
   );
@@ -416,7 +463,7 @@ const RegisterScreen = ({ navigation }) => {
     <View>
       <Text style={styles.stepTitle}>Comprovante de Residencia</Text>
       <Text style={styles.stepSubtitle}>Envie uma foto do comprovante recente (conta de luz, agua, internet).</Text>
-      <PhotoPicker label="Comprovante de Residencia" onPhotoSelected={setResidenceProofPhoto} currentPhotoUrl={residenceProofPhoto} />
+      <PhotoPicker label="Comprovante de Residencia" onPhotoSelected={setResidenceProofPhoto} currentPhotoUrl={residenceProofPhoto} deferred />
     </View>
   );
 

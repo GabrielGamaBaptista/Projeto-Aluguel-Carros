@@ -1,12 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  StyleSheet,
-  ActivityIndicator,
-  RefreshControl,
+  View, Text, FlatList, TouchableOpacity, StyleSheet,
+  ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import paymentService from '../services/paymentService';
@@ -33,25 +28,6 @@ const getStatusLabel = (status: string) => {
   }
 };
 
-const getChargeOrder = (c: any): number => {
-  const isAvulsa = !c.contractId;
-  const s = c.status;
-  if (s === 'CANCELLED') return 6;
-  if (isAvulsa && s === 'OVERDUE') return 0;
-  if (isAvulsa && s === 'PENDING') return 1;
-  if (!isAvulsa && s === 'OVERDUE') return 2;
-  if (!isAvulsa && s === 'PENDING') return 3;
-  if (!isAvulsa && (s === 'RECEIVED' || s === 'CONFIRMED')) return 4;
-  if (isAvulsa && (s === 'RECEIVED' || s === 'CONFIRMED')) return 5;
-  return 7;
-};
-
-const sortCharges = (list: any[]) =>
-  [...list].sort((a, b) => {
-    const orderDiff = getChargeOrder(a) - getChargeOrder(b);
-    if (orderDiff !== 0) return orderDiff;
-    return (a.dueDate || '').localeCompare(b.dueDate || '');
-  });
 
 const formatDate = (dateStr: string) => {
   if (!dateStr) return '';
@@ -65,12 +41,27 @@ export default function TenantPaymentsScreen() {
   const [charges, setCharges] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // Paginacao (Q3.2)
+  const [lastDoc, setLastDoc] = useState<any>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  const sortCharges = (data: any[]) => {
+    const active = ['PENDING', 'OVERDUE'];
+    const paid = ['RECEIVED', 'CONFIRMED'];
+    const byDueDateAsc = (a: any, b: any) => (a.dueDate || '').localeCompare(b.dueDate || '');
+    const byDueDateDesc = (a: any, b: any) => (b.dueDate || '').localeCompare(a.dueDate || '');
+    const pending = data.filter(c => active.includes(c.status)).sort(byDueDateAsc);
+    const paidRecurring = data.filter(c => paid.includes(c.status) && c.contractId).sort(byDueDateDesc);
+    const paidOneOff = data.filter(c => paid.includes(c.status) && !c.contractId).sort(byDueDateDesc);
+    return [...pending, ...paidRecurring, ...paidOneOff];
+  };
 
   const loadCharges = useCallback(async () => {
-    const result = await paymentService.getTenantCharges();
-    if (Array.isArray(result)) {
-      setCharges(sortCharges(result));
-    }
+    const result = await paymentService.getTenantChargesPaginated({ pageSize: 20 });
+    setCharges(sortCharges(result.data));
+    setLastDoc(result.lastDoc);
+    setHasMore(result.hasMore);
   }, []);
 
   useEffect(() => {
@@ -79,9 +70,25 @@ export default function TenantPaymentsScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
+    setLastDoc(null);
+    setHasMore(false);
     await loadCharges();
     setRefreshing(false);
   }, [loadCharges]);
+
+  const loadMore = useCallback(async () => {
+    if (!hasMore || loadingMore) return;
+    setLoadingMore(true);
+    const result = await paymentService.getTenantChargesPaginated({ pageSize: 20, startAfter: lastDoc });
+    setCharges(prev => {
+      const existingIds = new Set(prev.map((c: any) => c.id));
+      const newCharges = result.data.filter((c: any) => !existingIds.has(c.id));
+      return sortCharges([...prev, ...newCharges]);
+    });
+    setLastDoc(result.lastDoc);
+    setHasMore(result.hasMore);
+    setLoadingMore(false);
+  }, [hasMore, loadingMore, lastDoc]);
 
   const renderCharge = ({ item }: { item: any }) => {
     const canPay = item.status === 'PENDING' || item.status === 'OVERDUE';
@@ -130,6 +137,13 @@ export default function TenantPaymentsScreen() {
         keyExtractor={(item) => item.id}
         renderItem={renderCharge}
         contentContainerStyle={charges.length === 0 ? styles.emptyContainer : styles.listContent}
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.3}
+        ListFooterComponent={
+          loadingMore
+            ? <ActivityIndicator size="small" color="#4F46E5" style={{ marginVertical: 16 }} />
+            : null
+        }
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#4F46E5']} />}
         ListEmptyComponent={
           <Text style={styles.emptyText}>Nenhum pagamento encontrado</Text>

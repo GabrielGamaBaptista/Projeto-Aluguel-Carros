@@ -8,12 +8,14 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  PermissionsAndroid,
+  Platform,
 } from 'react-native';
 import { Camera } from 'lucide-react-native';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { uploadImageToCloudinary } from '../config/cloudinary';
 
-const PhotoPicker = ({ onPhotoSelected, label, currentPhotoUrl }) => {
+const PhotoPicker = ({ onPhotoSelected, label, currentPhotoUrl, deferred = false }) => {
   const [loading, setLoading] = useState(false);
   const [photoUrl, setPhotoUrl] = useState(currentPhotoUrl || null);
 
@@ -44,6 +46,21 @@ const PhotoPicker = ({ onPhotoSelected, label, currentPhotoUrl }) => {
   };
 
   const openCamera = async () => {
+    if (Platform.OS === 'android') {
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.CAMERA,
+        {
+          title: 'Permissao de Camera',
+          message: 'O app precisa acessar sua camera para tirar fotos.',
+          buttonPositive: 'Permitir',
+          buttonNegative: 'Cancelar',
+        }
+      );
+      if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+        Alert.alert('Permissao negada', 'Sem acesso a camera. Habilite nas configuracoes do dispositivo.');
+        return;
+      }
+    }
     const result = await launchCamera({
       mediaType: 'photo',
       quality: 0.8,
@@ -81,6 +98,12 @@ const PhotoPicker = ({ onPhotoSelected, label, currentPhotoUrl }) => {
   };
 
   const uploadPhoto = async (uri) => {
+    if (deferred) {
+      // Modo diferido: retorna URI local sem fazer upload (usado no cadastro, antes de ter auth)
+      setPhotoUrl(uri);
+      onPhotoSelected(uri);
+      return;
+    }
     setLoading(true);
     const result = await uploadImageToCloudinary(uri);
     setLoading(false);

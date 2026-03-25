@@ -66,13 +66,17 @@ exports.createAsaasSubaccount = onCall({ cors: true, invoker: 'public' }, async 
       throw new HttpsError('already-exists', 'Criacao de conta em andamento. Aguarde e tente novamente.');
     }
 
-    // 4. Buscar dados do locador no Firestore (coleção users)
+    // 4. Buscar dados do locador no Firestore (doc publico + private/data para PII)
     const userDoc = await db.collection('users').doc(uid).get();
     if (!userDoc.exists) {
       throw new HttpsError('not-found', 'Dados do locador não encontrados no Firestore.');
     }
 
-    const userData = userDoc.data();
+    const privateDoc = await db.collection('users').doc(uid)
+      .collection('private').doc('data').get();
+    const privateData = privateDoc.exists ? privateDoc.data() : {};
+    // Merge: private sobrescreve publico para campos PII (phone, endereco, etc.)
+    const userData = { ...userDoc.data(), ...privateData };
 
     // 4. Mapear dados para o formato do Asaas
     const isPf = !userData.personType || userData.personType === 'pf';
