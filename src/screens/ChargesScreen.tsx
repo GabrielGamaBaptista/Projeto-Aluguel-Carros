@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, RefreshControl, Modal, TextInput, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useNavigation } from '@react-navigation/native';
+import { showMessage } from 'react-native-flash-message';
 import { MdiCash } from '../components/icons/MdiIcons';
 import paymentService from '../services/paymentService';
 import { auth } from '../config/firebase';
@@ -150,7 +151,7 @@ const ChargesScreen: React.FC<Props> = ({ route }) => {
       setManualAmount('');
       setManualDescription('');
       fetchData();
-      Alert.alert('Sucesso', 'Cobranca avulsa criada!');
+      showMessage({ message: 'Cobranca avulsa criada!', type: 'success' });
     } else {
       Alert.alert('Erro', result?.error || 'Nao foi possivel criar a cobranca.');
     }

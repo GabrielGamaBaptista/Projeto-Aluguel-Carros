@@ -5,6 +5,7 @@ import {
   ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
 import { Building2, User, ClipboardList } from 'lucide-react-native';
+import { showMessage } from 'react-native-flash-message';
 import firestore from '@react-native-firebase/firestore';
 import { authService } from '../services/authService';
 import PhotoPicker from '../components/PhotoPicker';
@@ -301,9 +302,8 @@ const RegisterScreen = ({ navigation }) => {
     setLoading(false);
     if (result.success) {
       await authService.logout();
-      Alert.alert('Sucesso', 'Conta criada! Faca login para continuar.', [
-        { text: 'OK', onPress: () => navigation.navigate('Login') },
-      ]);
+      showMessage({ message: 'Conta criada! Faca login para continuar.', type: 'success' });
+      navigation.navigate('Login');
     } else Alert.alert('Erro', result.error);
   };
 

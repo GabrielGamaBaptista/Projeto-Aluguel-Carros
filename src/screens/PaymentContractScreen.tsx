@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { showMessage } from 'react-native-flash-message';
 import paymentService from '../services/paymentService';
 import { auth } from '../config/firebase';
 
@@ -165,9 +166,8 @@ const PaymentContractScreen: React.FC<Props> = ({ route, navigation }) => {
       const result: any = await paymentService.createContract(contractData);
 
       if (result && result.success) {
-        Alert.alert('Sucesso', 'Contrato criado!', [
-          { text: 'OK', onPress: () => navigation.goBack() }
-        ]);
+        showMessage({ message: 'Contrato criado!', type: 'success' });
+        navigation.goBack();
       } else {
         throw new Error(result?.error || 'Erro ao salvar contrato.');
       }

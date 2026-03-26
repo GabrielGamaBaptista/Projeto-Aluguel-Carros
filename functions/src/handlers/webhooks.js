@@ -70,15 +70,16 @@ exports.asaasWebhook = onRequest({ invoker: 'public', cors: false }, async (req,
       }
     }
 
-    let notificationPayload = null;
+    // notificationPayload e o RETORNO da transacao (nao closure) — garante que so existe se commit ok.
+    const NOTIFY_EVENTS = ['PAYMENT_RECEIVED', 'PAYMENT_RECEIVED_IN_CASH', 'PAYMENT_CONFIRMED', 'PAYMENT_OVERDUE'];
 
-    await db.runTransaction(async (tx) => {
+    const notificationPayload = await db.runTransaction(async (tx) => {
       const chargeDoc = await tx.get(chargeRef);
 
       if (!chargeDoc.exists) {
         // Raro — pode ocorrer se o documento foi deletado entre o preCheck e a transacao
         console.warn(`Cobranca nao encontrada na transacao. Evento ${event} ignorado.`);
-        return; // sai da transacao sem throw — o bloco externo retorna 200
+        return null; // sai da transacao sem throw — o bloco externo retorna 200
       }
 
       const chargeData = chargeDoc.data();
@@ -87,7 +88,7 @@ exports.asaasWebhook = onRequest({ invoker: 'public', cors: false }, async (req,
       const processedEvents = chargeData.processedEvents || [];
       if (processedEvents.includes(event)) {
         console.log(`Evento ${event} ja processado para a cobranca ${chargeId}.`);
-        return;
+        return null;
       }
 
       // Bloquear regressao de status — eventos Asaas podem chegar fora de ordem
@@ -106,12 +107,12 @@ exports.asaasWebhook = onRequest({ invoker: 'public', cors: false }, async (req,
         const REGRESS_STATUSES = ['OVERDUE', 'PENDING', 'CANCELLED'];
         if (ALREADY_PAID.includes(currentStatus) && REGRESS_STATUSES.includes(statusFromEvent)) {
           console.warn(`[webhook] Bloqueando regressao ${currentStatus} → ${statusFromEvent} para cobranca ${chargeId}. Evento ${event} ignorado.`);
-          return;
+          return null;
         }
         // REFUNDED e status completamente final
         if (currentStatus === 'REFUNDED') {
           console.warn(`[webhook] Cobranca ${chargeId} ja esta em REFUNDED (final). Evento ${event} ignorado.`);
-          return;
+          return null;
         }
       }
 
@@ -145,7 +146,7 @@ exports.asaasWebhook = onRequest({ invoker: 'public', cors: false }, async (req,
           // substituida por uma nova — ignorar sem fazer update e sem registrar em processedEvents.
           if (payment.id && chargeData.asaasPaymentId && payment.id !== chargeData.asaasPaymentId) {
             console.log(`PAYMENT_DELETED ignorado para ${chargeId}: payment.id (${payment.id}) != asaasPaymentId atual (${chargeData.asaasPaymentId}). Webhook da cobranca antiga de editCharge.`);
-            return;
+            return null;
           }
           updateData.status = 'CANCELLED';
           break;
@@ -157,18 +158,28 @@ exports.asaasWebhook = onRequest({ invoker: 'public', cors: false }, async (req,
           break;
       }
 
-      // Capturar contexto para notificacoes antes de sair da transacao (evita leitura extra pos-transacao).
-      // Nao notificar se a transicao e entre dois status "pago" (ex: CONFIRMED → RECEIVED):
-      // o Asaas envia ambos os eventos, mas o usuario ja foi notificado na primeira transicao.
+      // Capturar payload para notificacoes — somente para eventos que geram notificacao
+      // e somente se nao for transicao entre dois status "pago" (evita notificacao dupla).
+      // Retornar como resultado da transacao garante que so existe apos commit bem-sucedido.
       const ALREADY_PAID_STATUSES = ['RECEIVED', 'CONFIRMED'];
       const isTransitionBetweenPaidStatuses =
         ALREADY_PAID_STATUSES.includes(currentStatus) && ALREADY_PAID_STATUSES.includes(statusFromEvent);
 
-      if (!isTransitionBetweenPaidStatuses) {
-        notificationPayload = {
+      let payload = null;
+      if (NOTIFY_EVENTS.includes(event) && !isTransitionBetweenPaidStatuses) {
+        // Ler nome do locatario dentro da transacao — so para eventos que realmente notificam.
+        // Guard: tenantId invalido usa fallback sem lancar exception.
+        const tId = chargeData.tenantId;
+        let tenantName = 'Locatario';
+        if (tId && typeof tId === 'string') {
+          const tenantUserDoc = await tx.get(db.collection('users').doc(tId));
+          tenantName = tenantUserDoc.exists ? (tenantUserDoc.data().name || 'Locatario') : 'Locatario';
+        }
+        payload = {
           resolvedChargeId: chargeRef.id,
           landlordId: chargeData.landlordId,
-          tenantId: chargeData.tenantId,
+          tenantId: tId,
+          tenantName,
           amount: chargeData.amount,
           dueDate: chargeData.dueDate,
           carInfo: chargeData.carInfo,
@@ -176,12 +187,14 @@ exports.asaasWebhook = onRequest({ invoker: 'public', cors: false }, async (req,
       }
 
       tx.update(chargeRef, updateData);
+      return payload; // retorno da transacao — so disponivel se commit ok
     });
 
-    // Notificacoes pos-transacao — so enviadas se a transacao realmente atualizou o documento (idempotencia)
-    if (notificationPayload && ['PAYMENT_RECEIVED', 'PAYMENT_RECEIVED_IN_CASH', 'PAYMENT_CONFIRMED', 'PAYMENT_OVERDUE'].includes(event)) {
+    // Notificacoes pos-transacao — notificationPayload so existe se o commit foi bem-sucedido
+    // e o evento esta na lista de eventos que geram notificacao (filtro feito dentro da transacao).
+    if (notificationPayload) {
       try {
-        const { resolvedChargeId, landlordId, tenantId, amount, dueDate, carInfo } = notificationPayload;
+        const { resolvedChargeId, landlordId, tenantId, tenantName, amount, dueDate, carInfo } = notificationPayload;
         const formattedAmount = (amount || 0).toFixed(2).replace('.', ',');
         const [year, month, day] = (dueDate || '').split('-');
         const dueDateBR = dueDate ? `${day}/${month}/${year}` : '';
@@ -197,22 +210,18 @@ exports.asaasWebhook = onRequest({ invoker: 'public', cors: false }, async (req,
             sent: false,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
           });
-          // Notificar locador que locatario nao pagou
-          const tenantDocOverdue = await db.collection('users').doc(tenantId).get();
-          const tenantNameOverdue = tenantDocOverdue.exists ? tenantDocOverdue.data().name : 'Locatario';
+          // Notificar locador que locatario nao pagou (nome ja disponivel da transacao)
           await db.collection('notifications').add({
             userId: landlordId,
             title: `Pagamento em atraso — ${carInfo || ''}`,
-            body: `${tenantNameOverdue} nao pagou a cobranca de R$ ${formattedAmount} que venceu em ${dueDateBR}.`,
+            body: `${tenantName} nao pagou a cobranca de R$ ${formattedAmount} que venceu em ${dueDateBR}.`,
             data: { type: 'charge_overdue_landlord', chargeId: resolvedChargeId },
             read: false,
             sent: false,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
           });
         } else {
-          // Notificar locador que cobranca foi paga/confirmada
-          const tenantDoc = await db.collection('users').doc(tenantId).get();
-          const tenantName = tenantDoc.exists ? tenantDoc.data().name : 'Locatario';
+          // Notificar locador que cobranca foi paga/confirmada (nome ja disponivel da transacao)
           const eventLabel = event === 'PAYMENT_CONFIRMED' ? 'Pagamento confirmado' : 'Pagamento recebido';
           await db.collection('notifications').add({
             userId: landlordId,

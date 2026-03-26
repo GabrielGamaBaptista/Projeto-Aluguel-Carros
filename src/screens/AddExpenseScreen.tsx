@@ -4,6 +4,7 @@ import {
   Alert, ActivityIndicator, Switch, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { FileText, Wrench, Shield, ChevronDown } from 'lucide-react-native';
+import { showMessage } from 'react-native-flash-message';
 import { EXPENSE_CATEGORIES, EXPENSE_SUBCATEGORIES } from '../constants/expenseCategories';
 import expenseService from '../services/expenseService';
 
@@ -162,9 +163,8 @@ const AddExpenseScreen = ({ route, navigation }: any) => {
     setSaving(false);
 
     if (result.success) {
-      Alert.alert('Sucesso', isEditing ? 'Despesa atualizada!' : 'Despesa registrada!', [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
+      showMessage({ message: isEditing ? 'Despesa atualizada!' : 'Despesa registrada!', type: 'success' });
+      navigation.goBack();
     } else {
       Alert.alert('Erro', result.error || 'Falha ao salvar despesa.');
     }

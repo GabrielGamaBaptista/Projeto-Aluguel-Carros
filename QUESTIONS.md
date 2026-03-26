@@ -152,10 +152,12 @@ Em `tasksService._hasPendingTask()` (linhas 57-64), a query usa `carId`, `type`,
 
 ---
 
-### Q2.5 — Webhook re-le o documento apos a transacao para notificacoes
+### ✅ Q2.5 — Webhook re-le o documento apos a transacao para notificacoes
 Em `webhooks.js` (linha 162), apos a transacao, o webhook faz um `db.collection('charges').doc(chargeId).get()` separado para obter dados para notificacao. Os dados ja estavam disponiveis dentro da transacao. Isso e uma leitura desnecessaria e um potencial ponto de inconsistencia (os dados podem ter mudado entre a transacao e o re-read).
 
 **Resposta**:**bug**
+
+> **IMPLEMENTADO** (batch 4, v1.21.0): `notificationPayload` agora e o valor de retorno de `db.runTransaction(...)` em vez de variavel closure — elimina bug de retry onde dados de tentativa anterior vazavam. Leitura de `users/{tenantId}` movida para dentro da transacao (mesma operacao atomica). Guard `if (tId && typeof tId === 'string')` adicionado antes do `.doc()` para evitar crash com `tenantId` nulo. Leitura do user feita apenas para eventos em `NOTIFY_EVENTS` (nao para PAYMENT_REFUNDED/DELETED), eliminando read desnecessario.
 
 ---
 
@@ -445,10 +447,14 @@ Quando o usuario toca em uma notificacao push, o app abre mas NAO navega para a 
 
 ---
 
-### Q5.7 — Locatario nao pode ver detalhes do contrato
+### ✅ Q5.7 — Locatario nao pode ver detalhes do contrato
 O locatario pode ver cobrancas na aba Pagamentos, mas nao tem acesso ao `ContractDetailsScreen`. Nao pode ver o valor do aluguel, frequencia, ou historico do contrato. Deve ter visibilidade?
 
 **Resposta**:**melhoria** só tome muito cuidado nessa implementação pois o locatário em nenhuma hipótese pode ser capaz de alterar um contrato.
+
+> **IMPLEMENTADO** (batch 4, v1.21.0): `paymentService.getActiveContractForTenant()` busca contrato ativo do locatario (`tenantId == uid && active == true`). `TenantPaymentsScreen` carrega contrato em paralelo com cobranças (`Promise.all`) e exibe banner "Meu Contrato" no topo da lista com `carInfo` e frequencia. Ao tocar, navega para `ContractDetailsScreen` com `readOnly: true`. `ContractDetailsScreen` aceita param `readOnly` (default `false`): quando `true`, exibe nome do locador, oculta todos os botoes de edicao/cancelamento/pausa/excluir e oculta textos explicativos de edicao. Helper `toNavContract()` converte Timestamps do Firestore em strings ISO antes de passar como param de navegacao.
+>
+> **FIX pos-teste**: Texto "Altera o valor de todas as cobrancas futuras..." estava visivel para o locatario mesmo com `readOnly=true` — corrigido, agora e ocultado quando `readOnly`.
 
 ---
 
@@ -486,10 +492,14 @@ O valor de renda mensal enviado ao Asaas e sempre R$ 5.000 (onboarding.js linha 
 
 ---
 
-### Q5.12 — Sem fluxo de "pausar" contrato
+### ✅ Q5.12 — Sem fluxo de "pausar" contrato
 O schema do Firestore tem `pausedAt` no contrato, mas nao ha funcionalidade de pausar/despausar no app. So ha "cancelar" (irreversivel). Pausar seria util para ferias do locatario ou manutencao prolongada.
 
 **Resposta**:**melhoria**, ok, implemente a funcionalidade de pausar o contrato. e não se esqueça de adicionar este botão na tela do locador (tela de detalhamento do contrato)
+
+> **IMPLEMENTADO** (batch 4, v1.21.0): Cloud Function `pauseContract` (callable, rate limit 10/min) faz toggle atomico de `pausedAt` via `db.runTransaction` — previne race condition em cliques duplos. Retorna `{ success: true, paused: bool }`. Notifica locatario via `notifications/` ao pausar e ao retomar. `generateRecurringCharges` (cron) agora filtra com `.where('pausedAt', '==', null)` server-side em vez de `.filter()` client-side. `ContractDetailsScreen`: badge "Pausado" (ambar) aparece ao lado do badge "Ativo" quando `active && pausedAt`; botao "Pausar Contrato" (ambar) / "Retomar Contrato" (verde) com Alert de confirmacao antes de executar. `paymentService.pauseContract()` chama a CF. CF deployada e IAM aplicado via `apply-iam.js` (19 servicos total).
+>
+> **FIX pos-teste**: `ContratosTab` exibia badge "Ativo" mesmo em contratos pausados — corrigido para badge "Pausado" (ambar) quando `active && pausedAt`. `pausedAt` agora e passado nos params de navegacao para o `ContractDetailsScreen`.
 
 ---
 
@@ -579,10 +589,12 @@ Acoes como "Remover Locatario", "Cancelar Contrato", "Deletar Carro" deveriam te
 
 ---
 
-### Q7.5 — Sem feedback visual de sucesso apos operacoes
+### ✅ Q7.5 — Sem feedback visual de sucesso apos operacoes
 Apos completar uma task, criar uma cobranca, ou aprovar uma task, ha feedback visual claro (toast, banner, navegacao automatica)? Ou o usuario fica sem saber se a operacao foi bem-sucedida?
 
 **Resposta**:**melhoria**, não tem um feedback visual claro, e eu gostaria que tivesse.
+
+> **IMPLEMENTADO** (batch 4, v1.21.0): Todos os `Alert.alert('Sucesso', ...)` substituidos por `showMessage({ message: '...', type: 'success' })` do `react-native-flash-message` (ja instalado e registrado globalmente em `App.tsx` como `<FlashMessage position="top" />`). Quando havia `navigation.goBack()` no callback do Alert, passou a ser chamado imediatamente apos o `showMessage` — o toast persiste na tela anterior durante a transicao. Telas atualizadas: `TaskDetailsScreen` (6 toasts), `ContractDetailsScreen` (4 toasts), `ProfileScreen` (5 toasts), `CarDetailsScreen` (4 toasts), `ChargesScreen`, `AssignTenantScreen` (2 toasts), `MuralManagerScreen` (2 toasts), `PaymentDetailsScreen` (2 toasts), `EditCarScreen`, `AddCarScreen`, `RegisterScreen`, `PaymentContractScreen`, `AddExpenseScreen`, `HomeScreen`. Alertas de confirmacao destrutiva e alertas de erro foram mantidos como `Alert.alert`.
 
 ---
 

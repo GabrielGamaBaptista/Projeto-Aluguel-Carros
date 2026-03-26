@@ -60,6 +60,7 @@ export default function ContratosTab() {
           nextDueDate: item.nextDueDate,
           dayOfMonth: item.dayOfMonth || null,
           active: item.active,
+          pausedAt: item.pausedAt ? (item.pausedAt.toDate?.()?.toISOString?.() ?? true) : null,
           nextChargeOverride: item.nextChargeOverride
             ? { amount: item.nextChargeOverride.amount }
             : null,
@@ -68,9 +69,17 @@ export default function ContratosTab() {
     >
       <View style={styles.cardHeader}>
         <Text style={styles.carInfo}>{item.carInfo}</Text>
-        <View style={[styles.badge, item.active ? styles.badgeActive : styles.badgeInactive]}>
-          <Text style={[styles.badgeText, item.active ? styles.badgeActiveText : styles.badgeInactiveText]}>
-            {item.active ? 'Ativo' : 'Inativo'}
+        <View style={[styles.badge,
+          !item.active ? styles.badgeInactive
+          : item.pausedAt ? styles.badgePaused
+          : styles.badgeActive
+        ]}>
+          <Text style={[styles.badgeText,
+            !item.active ? styles.badgeInactiveText
+            : item.pausedAt ? styles.badgePausedText
+            : styles.badgeActiveText
+          ]}>
+            {!item.active ? 'Inativo' : item.pausedAt ? 'Pausado' : 'Ativo'}
           </Text>
         </View>
       </View>
@@ -147,9 +156,11 @@ const styles = StyleSheet.create({
   badge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10 },
   badgeActive: { backgroundColor: '#D1FAE5' },
   badgeInactive: { backgroundColor: '#F3F4F6' },
+  badgePaused: { backgroundColor: '#FEF3C7' },
   badgeText: { fontSize: 12, fontWeight: '600' },
   badgeActiveText: { color: '#059669' },
   badgeInactiveText: { color: '#9CA3AF' },
+  badgePausedText: { color: '#92400E' },
   tenantName: { fontSize: 13, color: '#6B7280', marginBottom: 8 },
   infoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   amount: { fontSize: 16, fontWeight: 'bold', color: '#1F2937' },

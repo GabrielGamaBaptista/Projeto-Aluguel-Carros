@@ -4,6 +4,7 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, Alert,
   ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform,
 } from 'react-native';
+import { showMessage } from 'react-native-flash-message';
 import { carsService } from '../services/carsService';
 import PhotoPicker from '../components/PhotoPicker';
 import DocumentPicker from '../components/DocumentPicker';
@@ -95,9 +96,8 @@ const EditCarScreen = ({ route, navigation }) => {
     setLoading(false);
 
     if (result.success) {
-      Alert.alert('Sucesso', 'Carro atualizado com sucesso!', [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
+      showMessage({ message: 'Carro atualizado com sucesso!', type: 'success' });
+      navigation.goBack();
     } else {
       Alert.alert('Erro', result.error);
     }

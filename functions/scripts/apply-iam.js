@@ -36,6 +36,8 @@ const SERVICES = [
   'gettenantdetailscf',
   // Adicionados no batch 3 (Q5.4):
   'deleteaccountcf',
+  // Adicionados no batch 4 (Q5.12):
+  'pausecontract',
 ];
 
 function getAccessToken() {

@@ -13,6 +13,7 @@ import {
   TextInput,
   Linking,
 } from 'react-native';
+import { showMessage } from 'react-native-flash-message';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import paymentService from '../services/paymentService';
@@ -155,9 +156,8 @@ export default function PaymentDetailsScreen() {
             const result: any = await paymentService.cancelCharge(chargeId);
             setCancelling(false);
             if (result?.success) {
-              Alert.alert('Sucesso', 'Cobrança cancelada.', [
-                { text: 'OK', onPress: () => navigation.goBack() },
-              ]);
+              showMessage({ message: 'Cobranca cancelada.', type: 'success' });
+              navigation.goBack();
             } else {
               Alert.alert('Erro', result?.error || 'Não foi possível cancelar.');
             }
@@ -217,7 +217,7 @@ export default function PaymentDetailsScreen() {
     setSaving(false);
     if (result?.success) {
       setEditing(false);
-      Alert.alert('Sucesso', 'Cobranca atualizada.');
+      showMessage({ message: 'Cobranca atualizada.', type: 'success' });
     } else {
       Alert.alert('Erro', result?.error || 'Nao foi possivel editar a cobranca.');
     }

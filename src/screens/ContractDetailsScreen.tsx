@@ -4,6 +4,7 @@ import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
   StyleSheet, Alert, ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
+import { showMessage } from 'react-native-flash-message';
 import { firestore } from '../config/firebase';
 import paymentService from '../services/paymentService';
 
@@ -35,7 +36,7 @@ const parseBRCurrency = (value: string): number => {
 };
 
 export default function ContractDetailsScreen({ route, navigation }: any) {
-  const { contractId, contract: initialContract } = route.params;
+  const { contractId, contract: initialContract, readOnly = false } = route.params;
 
   const [contract, setContract] = useState(initialContract);
   const [loading, setLoading] = useState(false);
@@ -113,7 +114,7 @@ export default function ContractDetailsScreen({ route, navigation }: any) {
         }
 
         setEditingAmount(false);
-        Alert.alert('Salvo', 'Valor do contrato atualizado com sucesso.');
+        showMessage({ message: 'Valor do contrato atualizado com sucesso.', type: 'success' });
       } catch (err: any) {
         Alert.alert('Erro', err?.message || 'Nao foi possivel salvar.');
       } finally {
@@ -152,7 +153,7 @@ export default function ContractDetailsScreen({ route, navigation }: any) {
                 Alert.alert('Erro', result?.error || 'Nao foi possivel cancelar o contrato.');
                 return;
               }
-              Alert.alert('Contrato cancelado', 'O contrato e suas cobrancas foram cancelados.');
+              showMessage({ message: 'Contrato e cobrancas cancelados com sucesso.', type: 'success' });
             } catch (err: any) {
               Alert.alert('Erro', err?.message || 'Nao foi possivel cancelar.');
             } finally {
@@ -163,6 +164,40 @@ export default function ContractDetailsScreen({ route, navigation }: any) {
       ]
     );
   }, [contract.carId]);
+
+  const handlePauseContract = useCallback(() => {
+    const isPaused = !!contract.pausedAt;
+    const action = isPaused ? 'Retomar' : 'Pausar';
+    const actionBody = isPaused
+      ? 'O contrato sera retomado e voltara a gerar cobranças recorrentes normalmente.'
+      : 'O contrato sera pausado. Nenhuma cobrança recorrente sera gerada enquanto estiver pausado.';
+
+    Alert.alert(
+      `${action} Contrato`,
+      actionBody,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: action,
+          onPress: async () => {
+            setLoading(true);
+            try {
+              const result = await paymentService.pauseContract(contractId);
+              if (!result?.success) {
+                Alert.alert('Erro', result?.error || `Nao foi possivel ${action.toLowerCase()} o contrato.`);
+                return;
+              }
+              showMessage({ message: `Contrato ${isPaused ? 'retomado' : 'pausado'} com sucesso.`, type: 'success' });
+            } catch (err: any) {
+              Alert.alert('Erro', err?.message || 'Nao foi possivel completar a operacao.');
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  }, [contract.pausedAt, contractId]);
 
   const handleDeleteContract = useCallback(() => {
     Alert.alert(
@@ -188,7 +223,7 @@ export default function ContractDetailsScreen({ route, navigation }: any) {
             } finally {
               setLoading(false);
             }
-            if (deleted) navigation.goBack();
+            if (deleted) { showMessage({ message: 'Contrato excluido.', type: 'success' }); navigation.goBack(); }
           },
         },
       ]
@@ -218,7 +253,7 @@ export default function ContractDetailsScreen({ route, navigation }: any) {
       }
       setPendingCharge((prev: any) => prev ? { ...prev, amount: parsed } : null);
       setEditingCharge(false);
-      Alert.alert('Salvo', 'Cobranca atualizada com sucesso.');
+      showMessage({ message: 'Cobranca atualizada com sucesso.', type: 'success' });
     } catch (err: any) {
       Alert.alert('Erro', err?.message || 'Nao foi possivel salvar.');
     } finally {
@@ -237,16 +272,26 @@ export default function ContractDetailsScreen({ route, navigation }: any) {
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Informacoes do Contrato</Text>
         <Row label="Carro" value={contract.carInfo} />
-        <Row label="Locatario" value={contract.tenantName} />
+        {readOnly
+          ? <Row label="Locador" value={contract.landlordName} />
+          : <Row label="Locatario" value={contract.tenantName} />
+        }
         <Row label="Frequencia" value={FREQUENCY_LABELS[contract.frequency] || contract.frequency} />
         <Row label="Metodo" value={BILLING_LABELS[contract.billingType] || contract.billingType} />
         <Row label="Inicio" value={formatDate(contract.startDate)} />
         <View style={styles.statusRow}>
           <Text style={styles.rowLabel}>Status</Text>
-          <View style={[styles.badge, contract.active ? styles.badgeActive : styles.badgeInactive]}>
-            <Text style={[styles.badgeText, contract.active ? styles.badgeActiveText : styles.badgeInactiveText]}>
-              {contract.active ? 'Ativo' : 'Inativo'}
-            </Text>
+          <View style={{ flexDirection: 'row', gap: 6 }}>
+            <View style={[styles.badge, contract.active ? styles.badgeActive : styles.badgeInactive]}>
+              <Text style={[styles.badgeText, contract.active ? styles.badgeActiveText : styles.badgeInactiveText]}>
+                {contract.active ? 'Ativo' : 'Inativo'}
+              </Text>
+            </View>
+            {contract.active && !!contract.pausedAt && (
+              <View style={styles.badgePaused}>
+                <Text style={styles.badgePausedText}>Pausado</Text>
+              </View>
+            )}
           </View>
         </View>
       </View>
@@ -254,10 +299,12 @@ export default function ContractDetailsScreen({ route, navigation }: any) {
       {/* Edicao permanente do valor */}
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Valor do Aluguel</Text>
-        <Text style={styles.cardSubtitle}>
-          Altera o valor de todas as cobrancas futuras geradas por este contrato.
-        </Text>
-        {editingAmount ? (
+        {!readOnly && (
+          <Text style={styles.cardSubtitle}>
+            Altera o valor de todas as cobrancas futuras geradas por este contrato.
+          </Text>
+        )}
+        {!readOnly && editingAmount ? (
           <View style={styles.editRow}>
             <TextInput
               style={styles.input}
@@ -283,7 +330,7 @@ export default function ContractDetailsScreen({ route, navigation }: any) {
         ) : (
           <View style={styles.valueRow}>
             <Text style={styles.valueText}>{formatCurrency(contract.rentAmount)}</Text>
-            {contract.active && (
+            {!readOnly && contract.active && (
               <TouchableOpacity style={styles.btnEdit} onPress={() => setEditingAmount(true)}>
                 <Text style={styles.btnEditText}>Editar</Text>
               </TouchableOpacity>
@@ -300,7 +347,7 @@ export default function ContractDetailsScreen({ route, navigation }: any) {
         ) : pendingCharge ? (
           <>
             <Row label="Vencimento" value={formatDate(pendingCharge.dueDate)} />
-            {editingCharge ? (
+            {!readOnly && editingCharge ? (
               <View style={styles.editRow}>
                 <TextInput
                   style={styles.input}
@@ -326,7 +373,7 @@ export default function ContractDetailsScreen({ route, navigation }: any) {
             ) : (
               <View style={styles.valueRow}>
                 <Text style={styles.valueText}>{formatCurrency(pendingCharge.amount)}</Text>
-                {contract.active && (
+                {!readOnly && contract.active && (
                   <TouchableOpacity
                     style={styles.btnEdit}
                     onPress={() => { setEditingCharge(true); setChargeEditAmount(String(pendingCharge.amount)); }}
@@ -345,21 +392,36 @@ export default function ContractDetailsScreen({ route, navigation }: any) {
         )}
       </View>
 
-      {/* Ver cobrancas */}
-      <TouchableOpacity
-        style={styles.btnCharges}
-        onPress={() => navigation.navigate('Charges', {
-          carId: contract.carId,
-          landlordId: contract.landlordId,
-          tenantId: contract.tenantId,
-          carInfo: contract.carInfo,
-        })}
-      >
-        <Text style={styles.btnChargesText}>Ver Cobranças deste Contrato →</Text>
-      </TouchableOpacity>
+      {/* Ver cobrancas — apenas para o locador */}
+      {!readOnly && (
+        <TouchableOpacity
+          style={styles.btnCharges}
+          onPress={() => navigation.navigate('Charges', {
+            carId: contract.carId,
+            landlordId: contract.landlordId,
+            tenantId: contract.tenantId,
+            carInfo: contract.carInfo,
+          })}
+        >
+          <Text style={styles.btnChargesText}>Ver Cobranças deste Contrato →</Text>
+        </TouchableOpacity>
+      )}
 
-      {/* Cancelar contrato ativo */}
-      {contract.active && (
+      {/* Pausar/Retomar contrato — apenas para o locador */}
+      {!readOnly && contract.active && (
+        <TouchableOpacity
+          style={[styles.btnPause, contract.pausedAt ? styles.btnResume : null]}
+          onPress={handlePauseContract}
+          disabled={loading}
+        >
+          {loading
+            ? <ActivityIndicator size="small" color="#fff" />
+            : <Text style={styles.btnPauseText}>{contract.pausedAt ? 'Retomar Contrato' : 'Pausar Contrato'}</Text>}
+        </TouchableOpacity>
+      )}
+
+      {/* Cancelar contrato ativo — apenas para o locador */}
+      {!readOnly && contract.active && (
         <TouchableOpacity
           style={styles.btnCancelContract}
           onPress={handleCancelContract}
@@ -371,8 +433,8 @@ export default function ContractDetailsScreen({ route, navigation }: any) {
         </TouchableOpacity>
       )}
 
-      {/* Excluir contrato inativo */}
-      {!contract.active && (
+      {/* Excluir contrato inativo — apenas para o locador */}
+      {!readOnly && !contract.active && (
         <TouchableOpacity
           style={styles.btnDelete}
           onPress={handleDeleteContract}
@@ -434,6 +496,14 @@ const styles = StyleSheet.create({
     alignItems: 'center', marginBottom: 8,
   },
   btnChargesText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  badgePaused: { backgroundColor: '#FEF3C7', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10 },
+  badgePausedText: { fontSize: 12, fontWeight: '600', color: '#D97706' },
+  btnPause: {
+    backgroundColor: '#F59E0B', borderRadius: 12, padding: 14,
+    alignItems: 'center', marginBottom: 8,
+  },
+  btnResume: { backgroundColor: '#059669' },
+  btnPauseText: { color: '#fff', fontWeight: '600', fontSize: 14 },
   btnCancelContract: {
     backgroundColor: '#DC2626', borderRadius: 12, padding: 14,
     alignItems: 'center', marginBottom: 8,

@@ -5,6 +5,7 @@ import {
   RefreshControl, Alert, ScrollView, ActivityIndicator, StatusBar,
 } from 'react-native';
 import { Bell, ClipboardList } from 'lucide-react-native';
+import { showMessage } from 'react-native-flash-message';
 import { MdiCar, MdiPin } from '../components/icons/MdiIcons';
 import { authService } from '../services/authService';
 import { carsService } from '../services/carsService';
@@ -106,7 +107,7 @@ const HomeScreen = ({ navigation }) => {
             const result = await tenantRequestService.acceptRequest(request.id);
             setAcceptingId(null);
             if (result.success) {
-              Alert.alert('Aceito!', 'Voce foi atribuido ao carro com sucesso.');
+              showMessage({ message: 'Voce foi atribuido ao carro com sucesso!', type: 'success' });
               loadData();
             } else { Alert.alert('Erro', result.error); }
           }

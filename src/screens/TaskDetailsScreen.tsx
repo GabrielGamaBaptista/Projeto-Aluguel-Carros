@@ -6,6 +6,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { Eye, AlertTriangle, CheckCircle2 } from 'lucide-react-native';
+import { showMessage } from 'react-native-flash-message';
 import { tasksService, REQUIRED_PHOTO_ANGLES, PHOTO_ANGLE_LABELS } from '../services/tasksService';
 import { carsService } from '../services/carsService';
 import { authService } from '../services/authService';
@@ -148,7 +149,8 @@ const TaskDetailsScreen = ({ route, navigation }) => {
     const result = await tasksService.completeKmTask(task.id, task.carId, kmNum, dashboardPhoto);
     setLoading(false);
     if (result.success) {
-      Alert.alert('Sucesso', 'Quilometragem atualizada!', [{ text: 'OK', onPress: () => navigation.goBack() }]);
+      showMessage({ message: 'Quilometragem atualizada!', type: 'success' });
+      navigation.goBack();
     } else { Alert.alert('Erro', result.error); }
   };
 
@@ -226,7 +228,8 @@ const TaskDetailsScreen = ({ route, navigation }) => {
     const result = await tasksService.completePhotoTask(task.id, task.carId, photosByAngle);
     setLoading(false);
     if (result.success) {
-      Alert.alert('Sucesso', 'Revisao fotografica concluida!', [{ text: 'OK', onPress: () => navigation.goBack() }]);
+      showMessage({ message: 'Revisao fotografica concluida!', type: 'success' });
+      navigation.goBack();
     } else { Alert.alert('Erro', result.error); }
   };
 
@@ -340,7 +343,8 @@ const TaskDetailsScreen = ({ route, navigation }) => {
     const result = await tasksService.completeOilTask(task.id, task.carId, kmNum, oilStickerPhoto, oilReceiptPhoto);
     setLoading(false);
     if (result.success) {
-      Alert.alert('Sucesso', 'Troca de oleo registrada!', [{ text: 'OK', onPress: () => navigation.goBack() }]);
+      showMessage({ message: 'Troca de oleo registrada!', type: 'success' });
+      navigation.goBack();
     } else { Alert.alert('Erro', result.error); }
   };
 
@@ -429,7 +433,8 @@ const TaskDetailsScreen = ({ route, navigation }) => {
     });
     setLoading(false);
     if (result.success) {
-      Alert.alert('Sucesso', 'Manutencao registrada!', [{ text: 'OK', onPress: () => navigation.goBack() }]);
+      showMessage({ message: 'Manutencao registrada!', type: 'success' });
+      navigation.goBack();
     } else { Alert.alert('Erro', result.error); }
   };
 
@@ -576,7 +581,7 @@ const TaskDetailsScreen = ({ route, navigation }) => {
                 setLoading(true);
                 const result = await tasksService.approveTask(task.id);
                 setLoading(false);
-                if (result.success) { Alert.alert('Aprovada!', 'Tarefa aprovada com sucesso.'); loadTask(); }
+                if (result.success) { showMessage({ message: 'Tarefa aprovada com sucesso.', type: 'success' }); loadTask(); }
                 else Alert.alert('Erro', result.error);
               }},
             ]);
@@ -680,7 +685,7 @@ const TaskDetailsScreen = ({ route, navigation }) => {
                   setLoading(false);
                   if (result.success) {
                     setRevisionModalVisible(false);
-                    Alert.alert('Enviada!', 'Solicitacao de correcao enviada ao locatario.');
+                    showMessage({ message: 'Solicitacao de correcao enviada ao locatario.', type: 'success' });
                     navigation.goBack();
                   } else {
                     Alert.alert('Erro', result.error);

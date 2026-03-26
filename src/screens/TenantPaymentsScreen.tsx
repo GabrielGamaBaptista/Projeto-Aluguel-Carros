@@ -6,6 +6,10 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import paymentService from '../services/paymentService';
 
+const FREQUENCY_LABELS: Record<string, string> = {
+  MONTHLY: 'Mensal', BIWEEKLY: 'Quinzenal', WEEKLY: 'Semanal',
+};
+
 const getStatusColor = (status: string) => {
   switch (status) {
     case 'PENDING': return '#6B7280';
@@ -45,6 +49,8 @@ export default function TenantPaymentsScreen() {
   const [lastDoc, setLastDoc] = useState<any>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  // Contrato ativo do locatario (Q5.7)
+  const [activeContract, setActiveContract] = useState<any>(null);
 
   const sortCharges = (data: any[]) => {
     const active = ['PENDING', 'OVERDUE'];
@@ -57,24 +63,28 @@ export default function TenantPaymentsScreen() {
     return [...pending, ...paidRecurring, ...paidOneOff];
   };
 
-  const loadCharges = useCallback(async () => {
-    const result = await paymentService.getTenantChargesPaginated({ pageSize: 20 });
-    setCharges(sortCharges(result.data));
-    setLastDoc(result.lastDoc);
-    setHasMore(result.hasMore);
+  const loadData = useCallback(async () => {
+    const [chargesResult, contract] = await Promise.all([
+      paymentService.getTenantChargesPaginated({ pageSize: 20 }),
+      paymentService.getActiveContractForTenant(),
+    ]);
+    setCharges(sortCharges(chargesResult.data));
+    setLastDoc(chargesResult.lastDoc);
+    setHasMore(chargesResult.hasMore);
+    setActiveContract(contract);
   }, []);
 
   useEffect(() => {
-    loadCharges().finally(() => setLoading(false));
-  }, [loadCharges]);
+    loadData().finally(() => setLoading(false));
+  }, [loadData]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     setLastDoc(null);
     setHasMore(false);
-    await loadCharges();
+    await loadData();
     setRefreshing(false);
-  }, [loadCharges]);
+  }, [loadData]);
 
   const loadMore = useCallback(async () => {
     if (!hasMore || loadingMore) return;
@@ -119,6 +129,39 @@ export default function TenantPaymentsScreen() {
     );
   };
 
+  // Sanitiza o contrato para navegacao — remove Timestamps nao-serializaveis
+  const toNavContract = (c: any) => ({
+    ...c,
+    createdAt: null,
+    updatedAt: null,
+    cancelledAt: null,
+    // pausedAt: preservar truthiness para o badge de "Pausado"
+    pausedAt: c.pausedAt ? (c.pausedAt.toDate?.()?.toISOString?.() ?? true) : null,
+  });
+
+  const renderContractBanner = () => {
+    if (!activeContract) return null;
+    return (
+      <TouchableOpacity
+        style={styles.contractBanner}
+        onPress={() => navigation.navigate('ContractDetails', {
+          contractId: activeContract.id,
+          contract: toNavContract(activeContract),
+          readOnly: true,
+        })}
+        activeOpacity={0.8}
+      >
+        <View style={styles.contractBannerLeft}>
+          <Text style={styles.contractBannerTitle}>Meu Contrato</Text>
+          <Text style={styles.contractBannerSub}>
+            {activeContract.carInfo} · {FREQUENCY_LABELS[activeContract.frequency] || activeContract.frequency}
+          </Text>
+        </View>
+        <Text style={styles.contractBannerArrow}>›</Text>
+      </TouchableOpacity>
+    );
+  };
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -136,7 +179,8 @@ export default function TenantPaymentsScreen() {
         data={charges}
         keyExtractor={(item) => item.id}
         renderItem={renderCharge}
-        contentContainerStyle={charges.length === 0 ? styles.emptyContainer : styles.listContent}
+        ListHeaderComponent={renderContractBanner}
+        contentContainerStyle={styles.listContent}
         onEndReached={loadMore}
         onEndReachedThreshold={0.3}
         ListFooterComponent={
@@ -187,4 +231,19 @@ const styles = StyleSheet.create({
   },
   payButtonText: { color: '#fff', fontWeight: '600', fontSize: 15 },
   paidText: { fontSize: 14, color: '#059669', fontStyle: 'italic' },
+  contractBanner: {
+    backgroundColor: '#EEF2FF',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+  },
+  contractBannerLeft: { flex: 1 },
+  contractBannerTitle: { fontSize: 14, fontWeight: '700', color: '#4F46E5', marginBottom: 2 },
+  contractBannerSub: { fontSize: 13, color: '#6366F1' },
+  contractBannerArrow: { fontSize: 24, color: '#4F46E5', marginLeft: 8 },
 });

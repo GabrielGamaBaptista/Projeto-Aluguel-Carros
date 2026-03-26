@@ -4,6 +4,7 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, Alert,
   ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform,
 } from 'react-native';
+import { showMessage } from 'react-native-flash-message';
 import { authService } from '../services/authService';
 import { carsService } from '../services/carsService';
 import PhotoPicker from '../components/PhotoPicker';
@@ -89,9 +90,8 @@ const AddCarScreen = ({ navigation }) => {
     setLoading(false);
 
     if (result.success) {
-      Alert.alert('Sucesso', 'Carro adicionado com sucesso!', [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
+      showMessage({ message: 'Carro adicionado com sucesso!', type: 'success' });
+      navigation.goBack();
     } else {
       Alert.alert('Erro', result.error);
     }

@@ -31,6 +31,7 @@ exports.generateRecurringCharges = charges.generateRecurringCharges;
 exports.createContractCF = contracts.createContract;
 exports.cancelContract = contracts.cancelContract;
 exports.editContract = contracts.editContract;
+exports.pauseContract = contracts.pauseContract;
 
 // Webhooks
 exports.asaasWebhook = webhooks.asaasWebhook;

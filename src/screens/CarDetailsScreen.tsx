@@ -5,13 +5,12 @@ import {
   Alert, ActivityIndicator, TextInput, Modal, Linking, KeyboardAvoidingView, Platform, RefreshControl,
 } from 'react-native';
 import { Gauge, Camera, Droplets, Wrench, ClipboardList } from 'lucide-react-native';
+import { showMessage } from 'react-native-flash-message';
 import { MdiCar } from '../components/icons/MdiIcons';
 import { authService } from '../services/authService';
 import { carsService } from '../services/carsService';
 import { tasksService, TASK_TYPES } from '../services/tasksService';
 import { usersService } from '../services/usersService';
-import expenseService from '../services/expenseService';
-import { EXPENSE_CATEGORIES, getSubcategoryLabel } from '../constants/expenseCategories';
 import { getPdfPreviewUrl, getPdfFullUrl } from '../config/cloudinary';
 import PdfViewer from '../components/PdfViewer';
 import ImageViewer from '../components/ImageViewer';
@@ -43,7 +42,6 @@ const CarDetailsScreen = ({ route, navigation }) => {
   const [pdfViewer, setPdfViewer] = useState({ visible: false, url: null, title: '' });
   const [imageViewer, setImageViewer] = useState({ visible: false, url: null, title: '' });
   const [refreshing, setRefreshing] = useState(false);
-  const [recentExpenses, setRecentExpenses] = useState([]);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => { loadCarDetails(); });
@@ -79,11 +77,6 @@ const CarDetailsScreen = ({ route, navigation }) => {
       if (tasksResult.success) setTasks(tasksResult.data);
       if (completedResult.success) setCompletedTasks(completedResult.data);
 
-      // Carregar despesas recentes (apenas locador)
-      if (userProfile?.role === 'locador') {
-        const expResult = await expenseService.getExpensesByCar(carId);
-        if (expResult.success) setRecentExpenses(expResult.data.slice(0, 5));
-      }
     } catch (error) {
       console.error('loadCarDetails error:', error);
     } finally {
@@ -97,7 +90,7 @@ const CarDetailsScreen = ({ route, navigation }) => {
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Deletar', style: 'destructive', onPress: async () => {
         const result = await carsService.deleteCar(carId);
-        if (result.success) Alert.alert('Sucesso', 'Carro deletado!', [{ text: 'OK', onPress: () => navigation.goBack() }]);
+        if (result.success) { showMessage({ message: 'Carro deletado!', type: 'success' }); navigation.goBack(); }
         else Alert.alert('Erro', result.error);
       }},
     ]);
@@ -145,7 +138,7 @@ const CarDetailsScreen = ({ route, navigation }) => {
     }
     const result = await tasksService.createManualTask(carId, taskType, extraData);
     if (result.success) {
-      Alert.alert('Sucesso', 'Tarefa solicitada ao locatario!');
+      showMessage({ message: 'Tarefa solicitada ao locatario!', type: 'success' });
       setShowTaskModal(false); setTaskDesc(''); setDueDateText(''); loadCarDetails();
     } else { Alert.alert('Erro', result.error); }
   };
@@ -154,7 +147,7 @@ const CarDetailsScreen = ({ route, navigation }) => {
     if (!maintenanceDesc.trim()) { Alert.alert('Erro', 'Descreva o problema ou a manutencao necessaria.'); return; }
     const result = await tasksService.createMaintenanceRequest(carId, authService.getCurrentUser()?.uid, maintenanceDesc, maintenanceType);
     if (result.success) {
-      Alert.alert('Sucesso', 'Solicitacao de manutencao enviada ao locador!');
+      showMessage({ message: 'Solicitacao de manutencao enviada ao locador!', type: 'success' });
       setShowMaintenanceModal(false); setMaintenanceDesc(''); setMaintenanceType(''); loadCarDetails();
     } else { Alert.alert('Erro', result.error); }
   };
@@ -167,7 +160,7 @@ const CarDetailsScreen = ({ route, navigation }) => {
         { text: 'Cancelar', style: 'cancel' },
         { text: 'Remover', style: 'destructive', onPress: async () => {
           const result = await carsService.removeTenant(carId);
-          if (result.success) { Alert.alert('Sucesso', 'Locatario removido.'); loadCarDetails(); }
+          if (result.success) { showMessage({ message: 'Locatario removido.', type: 'success' }); loadCarDetails(); }
           else Alert.alert('Erro', result.error);
         }},
       ]
@@ -380,31 +373,6 @@ const CarDetailsScreen = ({ route, navigation }) => {
           </View>
         )}
 
-        {/* Despesas Recentes (locador) */}
-        {isLandlord && recentExpenses.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Despesas Recentes</Text>
-            {recentExpenses.map((exp: any) => {
-              const catInfo = EXPENSE_CATEGORIES[exp.category as keyof typeof EXPENSE_CATEGORIES];
-              return (
-                <TouchableOpacity key={exp.id} style={[styles.expenseItem, { borderLeftColor: catInfo?.color || '#6B7280' }]}
-                  onPress={() => navigation.navigate('AddExpense', {
-                    carId: car.id,
-                    carInfo: `${car.brand} ${car.model} (${car.plate})`,
-                    tenantId: car.tenantId,
-                    landlordId: car.landlordId,
-                    expense: exp,
-                  })}>
-                  <View style={styles.expenseItemInfo}>
-                    <Text style={styles.expenseItemCategory}>{catInfo?.label || exp.category}{exp.subcategory ? ` - ${getSubcategoryLabel(exp.category, exp.subcategory)}` : ''}</Text>
-                    <Text style={styles.expenseItemDate}>{exp.date ? exp.date.split('-').reverse().join('/') : ''}</Text>
-                  </View>
-                  <Text style={styles.expenseItemAmount}>R$ {exp.amount?.toFixed(2)}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        )}
 
         {/* Acao do Locatario */}
         {isTenant && (
@@ -629,15 +597,6 @@ const styles = StyleSheet.create({
   financialButton: { backgroundColor: '#0F766E' },
   historyButton: { backgroundColor: '#7C3AED' },
   expenseButton: { backgroundColor: '#D97706' },
-  expenseItem: {
-    backgroundColor: '#fff', padding: 14, borderRadius: 12, marginBottom: 8,
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    borderLeftWidth: 4,
-  },
-  expenseItemInfo: { flex: 1 },
-  expenseItemCategory: { fontSize: 14, fontWeight: '600', color: '#1F2937' },
-  expenseItemDate: { fontSize: 12, color: '#6B7280', marginTop: 2 },
-  expenseItemAmount: { fontSize: 16, fontWeight: 'bold', color: '#1F2937' },
   actionButtonText: { fontSize: 16, fontWeight: 'bold', color: '#fff' },
   emptyTasks: { backgroundColor: '#fff', padding: 20, borderRadius: 12, alignItems: 'center' },
   emptyTasksText: { fontSize: 14, color: '#6B7280' },

@@ -5,6 +5,7 @@ import {
   ActivityIndicator, FlatList, ScrollView,
 } from 'react-native';
 import { Search } from 'lucide-react-native';
+import { showMessage } from 'react-native-flash-message';
 import { carsService } from '../services/carsService';
 import { authService } from '../services/authService';
 import { tenantRequestService } from '../services/tenantRequestService';
@@ -109,7 +110,7 @@ const AssignTenantScreen = ({ route, navigation }) => {
             );
             setLoading(false);
             if (result.success) {
-              Alert.alert('Enviada!', 'Solicitacao enviada. O locatario recebera uma notificacao.');
+              showMessage({ message: 'Solicitacao enviada ao locatario!', type: 'success' });
               loadData(); // Recarregar pendentes
               setSearchResults([]);
               setSearchQuery('');
@@ -143,7 +144,7 @@ const AssignTenantScreen = ({ route, navigation }) => {
           const result = await carsService.removeTenant(carId);
           setLoading(false);
           if (result.success) {
-            Alert.alert('Sucesso', 'Locatario removido!', [{ text: 'OK', onPress: () => navigation.goBack() }]);
+            showMessage({ message: 'Locatario removido!', type: 'success' }); navigation.goBack();
           } else Alert.alert('Erro', result.error);
         }
       },

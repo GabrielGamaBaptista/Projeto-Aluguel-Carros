@@ -311,6 +311,76 @@ exports.createContract = onCall({ cors: true, invoker: 'public' }, async (reques
   }
 });
 
+// ─── pauseContract ────────────────────────────────────────────────────────────
+// Alterna entre pausado (pausedAt != null) e ativo (pausedAt = null).
+// Contratos pausados sao ignorados pelo cron de cobranças recorrentes.
+exports.pauseContract = onCall({ cors: true, invoker: 'public' }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Usuario nao autenticado.');
+  }
+  await checkRateLimit(request.auth.uid, 'pauseContract', 10, 60000);
+
+  const { contractId } = request.data;
+  if (!contractId) {
+    throw new HttpsError('invalid-argument', 'contractId e obrigatorio.');
+  }
+
+  const db = admin.firestore();
+
+  try {
+    const contractDoc = await db.collection('rentalContracts').doc(contractId).get();
+    if (!contractDoc.exists) {
+      throw new HttpsError('not-found', 'Contrato nao encontrado.');
+    }
+
+    const contract = contractDoc.data();
+
+    if (request.auth.uid !== contract.landlordId) {
+      throw new HttpsError('permission-denied', 'Apenas o locador pode pausar/retomar este contrato.');
+    }
+    if (!contract.active) {
+      throw new HttpsError('failed-precondition', 'Nao e possivel pausar/retomar um contrato inativo.');
+    }
+
+    // Usar transacao para garantir atomicidade do toggle (evita race condition)
+    let isPaused;
+    await db.runTransaction(async (tx) => {
+      const freshDoc = await tx.get(db.collection('rentalContracts').doc(contractId));
+      if (!freshDoc.exists) throw new HttpsError('not-found', 'Contrato nao encontrado.');
+      const freshData = freshDoc.data();
+      if (!freshData.active) throw new HttpsError('failed-precondition', 'Contrato inativo.');
+      isPaused = !!freshData.pausedAt;
+      const updateData = isPaused
+        ? { pausedAt: null, updatedAt: admin.firestore.FieldValue.serverTimestamp() }
+        : { pausedAt: admin.firestore.FieldValue.serverTimestamp(), updatedAt: admin.firestore.FieldValue.serverTimestamp() };
+      tx.update(db.collection('rentalContracts').doc(contractId), updateData);
+    });
+
+    // Notificar locatario sobre a mudanca de estado do contrato
+    try {
+      const action = isPaused ? 'retomado' : 'pausado';
+      await db.collection('notifications').add({
+        userId: contract.tenantId,
+        title: `Contrato ${action} — ${contract.carInfo || ''}`,
+        body: `Seu contrato de aluguel do veiculo ${contract.carInfo || ''} foi ${action} pelo locador.`,
+        data: { type: isPaused ? 'contract_resumed' : 'contract_paused', contractId },
+        read: false,
+        sent: false,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (notifErr) {
+      console.error('Erro ao criar notificacao de pausa/retomada de contrato:', notifErr.message);
+    }
+
+    return { success: true, paused: !isPaused };
+
+  } catch (error) {
+    if (error instanceof HttpsError) throw error;
+    console.error('Erro ao pausar/retomar contrato:', error);
+    throw new HttpsError('internal', 'Erro interno ao pausar/retomar contrato.');
+  }
+});
+
 // ─── editContract ─────────────────────────────────────────────────────────────
 // Editar contrato: apenas rentAmount permanente
 exports.editContract = onCall({ cors: true, invoker: 'public' }, async (request) => {

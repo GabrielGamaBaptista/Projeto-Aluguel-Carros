@@ -393,12 +393,15 @@ exports.generateRecurringCharges = onSchedule(
     fiveDaysFromNow.setDate(now.getDate() + 5);
     const fiveDaysStr = fiveDaysFromNow.toISOString().split('T')[0];
 
-    // Buscar TODOS os contratos ativos — filtramos por frequencia client-side
+    // Buscar contratos ativos e nao pausados (Q5.12: pausedAt==null exclui pausados)
     const activeContracts = await db.collection('rentalContracts')
       .where('active', '==', true)
+      .where('pausedAt', '==', null)
       .get();
 
-    console.log(`Verificando ${activeContracts.size} contratos ativos para recorrencia.`);
+    const contractDocs = activeContracts.docs;
+
+    console.log(`Verificando ${contractDocs.length} contratos ativos para recorrencia.`);
 
     // Q2.7: processar contratos em batches de 5 para evitar rate limit no Asaas
     const BATCH_SIZE = 5;
@@ -406,8 +409,6 @@ exports.generateRecurringCharges = onSchedule(
 
     let processedCount = 0;
     let errorCount = 0;
-
-    const contractDocs = activeContracts.docs;
 
     for (let i = 0; i < contractDocs.length; i += BATCH_SIZE) {
       const batchDocs = contractDocs.slice(i, i + BATCH_SIZE);

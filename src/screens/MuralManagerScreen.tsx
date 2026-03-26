@@ -5,6 +5,7 @@ import {
   Alert, ActivityIndicator, FlatList, Modal, RefreshControl, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { Megaphone } from 'lucide-react-native';
+import { showMessage } from 'react-native-flash-message';
 import { MdiPin } from '../components/icons/MdiIcons';
 import { authService } from '../services/authService';
 import { muralService, MURAL_CATEGORIES } from '../services/muralService';
@@ -109,7 +110,7 @@ const MuralManagerScreen = ({ navigation }) => {
         title, content, category, targetType, targetTenantId, targetCarId, pinned,
       });
       if (result.success) {
-        Alert.alert('Sucesso', 'Post atualizado!');
+        showMessage({ message: 'Post atualizado!', type: 'success' });
       } else {
         Alert.alert('Erro', result.error);
       }
@@ -118,7 +119,7 @@ const MuralManagerScreen = ({ navigation }) => {
         title, content, category, targetType, targetTenantId, targetCarId, pinned,
       });
       if (result.success) {
-        Alert.alert('Sucesso', 'Post publicado no mural!');
+        showMessage({ message: 'Post publicado no mural!', type: 'success' });
       } else {
         Alert.alert('Erro', result.error);
       }

@@ -5,6 +5,7 @@ import {
   ActivityIndicator, ScrollView, SafeAreaView, Image, StatusBar, Modal,
 } from 'react-native';
 import { Lock, LogOut, Trash2 } from 'lucide-react-native';
+import { showMessage } from 'react-native-flash-message';
 import functions from '@react-native-firebase/functions';
 import { authService } from '../services/authService';
 import { auth, firestore } from '../config/firebase';
@@ -191,7 +192,7 @@ const ProfileScreen = ({ navigation }) => {
       await batch.commit();
       setUserProfile(p => ({ ...p, ...publicUpdates }));
       setEditing(false);
-      Alert.alert('Sucesso', 'Perfil atualizado!');
+      showMessage({ message: 'Perfil atualizado!', type: 'success' });
     } catch { Alert.alert('Erro', 'Nao foi possivel salvar.'); }
     setSaving(false);
   };
@@ -234,7 +235,7 @@ const ProfileScreen = ({ navigation }) => {
       await batch.commit();
       setUserProfile(p => ({ ...p, ...publicUpdates, ...privateUpdates }));
       setEditingPersonal(false);
-      Alert.alert('Sucesso', 'Dados pessoais atualizados!');
+      showMessage({ message: 'Dados pessoais atualizados!', type: 'success' });
     } catch { Alert.alert('Erro', 'Nao foi possivel salvar.'); }
     setSavingPersonal(false);
   };
@@ -272,7 +273,7 @@ const ProfileScreen = ({ navigation }) => {
       await batch.commit();
       setUserProfile(p => ({ ...p, ...privateUpdates }));
       setEditingAddress(false);
-      Alert.alert('Sucesso', 'Endereco atualizado!');
+      showMessage({ message: 'Endereco atualizado!', type: 'success' });
     } catch { Alert.alert('Erro', 'Nao foi possivel salvar.'); }
     setSavingAddress(false);
   };
@@ -299,7 +300,7 @@ const ProfileScreen = ({ navigation }) => {
       await batch.commit();
       setUserProfile(p => ({ ...p, ...privateUpdates }));
       setEditingCnh(false);
-      Alert.alert('Sucesso', 'CNH atualizada!');
+      showMessage({ message: 'CNH atualizada!', type: 'success' });
     } catch { Alert.alert('Erro', 'Nao foi possivel salvar.'); }
     setSavingCnh(false);
   };
@@ -316,7 +317,7 @@ const ProfileScreen = ({ navigation }) => {
       await batch.commit();
       setUserProfile(p => ({ ...p, ...privateUpdates }));
       setEditingResidence(false);
-      Alert.alert('Sucesso', 'Comprovante atualizado!');
+      showMessage({ message: 'Comprovante atualizado!', type: 'success' });
     } catch { Alert.alert('Erro', 'Nao foi possivel salvar.'); }
     setSavingResidence(false);
   };

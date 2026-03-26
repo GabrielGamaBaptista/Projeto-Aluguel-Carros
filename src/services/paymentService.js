@@ -232,6 +232,23 @@ const paymentService = {
   },
 
   /**
+   * Pausa ou retoma um contrato ativo (Q5.12).
+   * Contratos pausados nao geram cobranças recorrentes no cron.
+   * @param {string} contractId
+   * @returns {Promise<{success: boolean, paused: boolean}>}
+   */
+  pauseContract: async (contractId) => {
+    try {
+      const pauseContractFn = fn().httpsCallable('pauseContract');
+      const result = await pauseContractFn({ contractId });
+      return result.data;
+    } catch (error) {
+      console.error('Error pausing/resuming contract:', error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  /**
    * Deletes an inactive rental contract document from Firestore.
    * Should only be called for contracts with active === false.
    * @param {string} contractId
@@ -363,6 +380,26 @@ const paymentService = {
       return null;
     } catch (error) {
       console.error('Error getting contract by car:', error);
+      return null;
+    }
+  },
+
+  // Retorna o contrato ativo do locatario autenticado (usado em TenantPaymentsScreen — Q5.7)
+  getActiveContractForTenant: async () => {
+    try {
+      const uid = auth().currentUser?.uid;
+      if (!uid) return null;
+      const snapshot = await firestore()
+        .collection('rentalContracts')
+        .where('tenantId', '==', uid)
+        .where('active', '==', true)
+        .limit(1)
+        .get();
+      if (snapshot.empty) return null;
+      const doc = snapshot.docs[0];
+      return { id: doc.id, ...doc.data() };
+    } catch (error) {
+      console.error('Error getting active contract for tenant:', error);
       return null;
     }
   },
