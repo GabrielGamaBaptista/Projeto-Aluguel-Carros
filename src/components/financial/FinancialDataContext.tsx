@@ -59,14 +59,14 @@ export const FinancialDataProvider = ({ children }: { children: React.ReactNode 
       setRefreshing(true);
       setError(null);
       const uid = auth().currentUser?.uid;
-      const [chargesData, contractsData, expensesResult, customCatsResult] = await Promise.all([
+      const [chargesResult, contractsResult, expensesResult, customCatsResult] = await Promise.all([
         paymentService.getAllChargesForLandlord(),
         paymentService.getAllContractsForLandlord(),
         uid ? expenseService.getExpensesByLandlord(uid) : { success: true, data: [] },
         uid ? expenseService.getCustomCategories(uid) : { success: true, data: [] },
       ]);
-      setCharges(chargesData);
-      setContracts(contractsData);
+      setCharges(chargesResult.data || []);
+      setContracts(contractsResult.data || []);
       if (expensesResult.success && expensesResult.data) setExpenses(expensesResult.data);
       if (customCatsResult.success && customCatsResult.data) setCustomCategories(customCatsResult.data);
     } catch (err: any) {

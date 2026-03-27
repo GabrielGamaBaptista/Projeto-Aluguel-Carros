@@ -134,8 +134,8 @@ const PaymentContractScreen: React.FC<Props> = ({ route, navigation }) => {
     setLoading(true);
     try {
       // Verificar se já existe contrato ativo para este carro
-      const existingContract = await paymentService.getContractByCar(carId);
-      if (existingContract && existingContract.id) {
+      const existingContractResult = await paymentService.getContractByCar(carId, 'locador');
+      if (existingContractResult.data?.id) {
         Alert.alert('Contrato existente', 'Este carro já possui um contrato de pagamento ativo.');
         setLoading(false);
         return;

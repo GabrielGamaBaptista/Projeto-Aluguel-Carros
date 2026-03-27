@@ -107,11 +107,13 @@ exports.assignTenant = onCall({ cors: true, invoker: 'public' }, async (request)
       .get();
 
     if (!otherPending.empty) {
+      const ttlAt = admin.firestore.Timestamp.fromMillis(Date.now() + 30 * 24 * 60 * 60 * 1000);
       const batch = db.batch();
       otherPending.docs.forEach(doc => {
         batch.update(doc.ref, {
           status: 'cancelled',
           respondedAt: admin.firestore.FieldValue.serverTimestamp(),
+          ttlAt,
         });
       });
       await batch.commit();

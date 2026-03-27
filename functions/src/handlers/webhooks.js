@@ -1,13 +1,14 @@
 const { onRequest } = require('firebase-functions/v2/https');
+const { logger } = require('firebase-functions/v2');
 const admin = require('firebase-admin');
 const crypto = require('crypto');
-const { config } = require('../asaas/client');
+const { config, ASAAS_WEBHOOK_TOKEN } = require('../asaas/client');
 
 /**
  * Cloud Function HTTPS (gen 2) para processar webhooks do Asaas.
  * Recebe notificações de alteração de status de pagamento.
  */
-exports.asaasWebhook = onRequest({ invoker: 'public', cors: false }, async (req, res) => {
+exports.asaasWebhook = onRequest({ invoker: 'public', cors: false, secrets: [ASAAS_WEBHOOK_TOKEN] }, async (req, res) => {
   // 1. Validar método — GET é aceito para validação da URL pelo Asaas
   if (req.method === 'GET') {
     return res.status(200).send('OK');
@@ -21,24 +22,25 @@ exports.asaasWebhook = onRequest({ invoker: 'public', cors: false }, async (req,
   // para evitar que eventos falsos sejam processados em caso de misconfiguracao.
   const webhookToken = config.webhook_token;
   if (!webhookToken) {
-    console.error('ASAAS_WEBHOOK_TOKEN nao configurado. Rejeitando requisicao de webhook por seguranca.');
+    logger.error('ASAAS_WEBHOOK_TOKEN nao configurado. Rejeitando requisicao de webhook por seguranca.');
     return res.status(500).send('Webhook token not configured');
   }
   const receivedToken = req.headers['asaas-access-token'];
   const tokenBuffer = Buffer.from(webhookToken, 'utf8');
   const receivedBuffer = Buffer.from(receivedToken || '', 'utf8');
   if (!receivedToken || tokenBuffer.length !== receivedBuffer.length || !crypto.timingSafeEqual(tokenBuffer, receivedBuffer)) {
-    console.warn('Webhook rejeitado: token invalido ou ausente.');
+    logger.warn('Webhook rejeitado: token invalido ou ausente.');
     return res.status(401).send('Unauthorized');
   }
 
+  const startTime = Date.now();
   const { event, payment } = req.body;
 
   // 2. O externalReference é o chargeId do Firestore
   const chargeId = payment ? payment.externalReference : null;
 
   if (!chargeId) {
-    console.warn('Webhook recebido sem externalReference/chargeId:', req.body);
+    logger.warn('webhook.missingChargeId', { event, asaasId: payment?.id });
     return res.status(200).send('OK (Ignored)');
   }
 
@@ -59,13 +61,13 @@ exports.asaasWebhook = onRequest({ invoker: 'public', cors: false }, async (req,
           .get();
         if (!fallbackSnap.empty) {
           chargeRef = fallbackSnap.docs[0].ref;
-          console.log(`[webhook] Fallback: cobranca encontrada por asaasPaymentId (${asaasPaymentId}) apos miss por externalReference (${chargeId}).`);
+          logger.info('webhook.fallback', { asaasPaymentId, externalReference: chargeId, event });
         } else {
-          console.warn(`[webhook] Cobranca nao encontrada por externalReference (${chargeId}) nem asaasPaymentId (${asaasPaymentId}). Evento ${event} ignorado.`);
+          logger.warn('webhook.notFound', { chargeId, asaasPaymentId, event });
           return res.status(200).send('OK (Not found)');
         }
       } else {
-        console.warn(`[webhook] Cobranca ${chargeId} nao encontrada no Firestore e sem asaasPaymentId no payload. Evento ${event} ignorado.`);
+        logger.warn('webhook.notFound', { chargeId, event, asaasId: null });
         return res.status(200).send('OK (Not found)');
       }
     }
@@ -78,7 +80,7 @@ exports.asaasWebhook = onRequest({ invoker: 'public', cors: false }, async (req,
 
       if (!chargeDoc.exists) {
         // Raro — pode ocorrer se o documento foi deletado entre o preCheck e a transacao
-        console.warn(`Cobranca nao encontrada na transacao. Evento ${event} ignorado.`);
+        logger.warn('webhook.chargeDeletedMidTransaction', { event, chargeId });
         return null; // sai da transacao sem throw — o bloco externo retorna 200
       }
 
@@ -87,7 +89,7 @@ exports.asaasWebhook = onRequest({ invoker: 'public', cors: false }, async (req,
       // Verificar idempotencia dentro da transacao (verdadeira atomicidade)
       const processedEvents = chargeData.processedEvents || [];
       if (processedEvents.includes(event)) {
-        console.log(`Evento ${event} ja processado para a cobranca ${chargeId}.`);
+        logger.info('webhook.duplicate', { event, chargeId });
         return null;
       }
 
@@ -106,12 +108,12 @@ exports.asaasWebhook = onRequest({ invoker: 'public', cors: false }, async (req,
         const ALREADY_PAID = ['RECEIVED', 'CONFIRMED'];
         const REGRESS_STATUSES = ['OVERDUE', 'PENDING', 'CANCELLED'];
         if (ALREADY_PAID.includes(currentStatus) && REGRESS_STATUSES.includes(statusFromEvent)) {
-          console.warn(`[webhook] Bloqueando regressao ${currentStatus} → ${statusFromEvent} para cobranca ${chargeId}. Evento ${event} ignorado.`);
+          logger.warn('webhook.statusRegression', { chargeId, currentStatus, newStatus: statusFromEvent, event });
           return null;
         }
         // REFUNDED e status completamente final
         if (currentStatus === 'REFUNDED') {
-          console.warn(`[webhook] Cobranca ${chargeId} ja esta em REFUNDED (final). Evento ${event} ignorado.`);
+          logger.warn('webhook.alreadyRefunded', { chargeId, event });
           return null;
         }
       }
@@ -145,7 +147,7 @@ exports.asaasWebhook = onRequest({ invoker: 'public', cors: false }, async (req,
           // como CANCELLED. Se payment.id != asaasPaymentId atual no Firestore, a cobranca ja foi
           // substituida por uma nova — ignorar sem fazer update e sem registrar em processedEvents.
           if (payment.id && chargeData.asaasPaymentId && payment.id !== chargeData.asaasPaymentId) {
-            console.log(`PAYMENT_DELETED ignorado para ${chargeId}: payment.id (${payment.id}) != asaasPaymentId atual (${chargeData.asaasPaymentId}). Webhook da cobranca antiga de editCharge.`);
+            logger.info('webhook.deletedIgnored', { chargeId, paymentId: payment.id, currentAsaasPaymentId: chargeData.asaasPaymentId });
             return null;
           }
           updateData.status = 'CANCELLED';
@@ -154,7 +156,7 @@ exports.asaasWebhook = onRequest({ invoker: 'public', cors: false }, async (req,
           updateData.status = 'REFUNDED';
           break;
         default:
-          console.log(`Evento ${event} recebido para ${chargeId}, mas nao mapeado para alteracao de status.`);
+          logger.info('webhook.unknownEvent', { event, chargeId });
           break;
       }
 
@@ -245,17 +247,18 @@ exports.asaasWebhook = onRequest({ invoker: 'public', cors: false }, async (req,
           });
         }
       } catch (notifErr) {
-        console.error('Erro ao criar notificacao de pagamento:', notifErr.message);
+        logger.error('webhook.notificationError', { error: notifErr.message, event, chargeId });
       }
     }
 
+    logger.info('webhook.processed', { event, chargeId, processingTimeMs: Date.now() - startTime });
     return res.status(200).send('OK');
 
   } catch (error) {
     if (error.message && error.message.startsWith('CHARGE_NOT_FOUND:')) {
       return res.status(404).send('Charge not found');
     }
-    console.error(`Erro ao processar webhook para a cobranca ${chargeId}:`, error);
+    logger.error('webhook.error', { event, chargeId, error: error.message, processingTimeMs: Date.now() - startTime });
     return res.status(500).send('Internal Server Error');
   }
 });

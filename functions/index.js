@@ -60,3 +60,12 @@ exports.notifyOverdueTasks = taskNotifications.notifyOverdueTasks;
 // Exclusao de conta com cascade LGPD (Q5.4)
 const accountDeletion = require('./src/handlers/accountDeletion');
 exports.deleteAccountCF = accountDeletion.deleteAccountCF;
+
+// Queries de PII via admin SDK — sem expor dados no doc publico (Q1.2 Fase C)
+const piiQueries = require('./src/handlers/piiQueries');
+exports.checkPiiUniqueCF = piiQueries.checkPiiUniqueCF;
+exports.findEmailByIdentifierCF = piiQueries.findEmailByIdentifierCF;
+
+// Busca de locatarios restrita ao locador autenticado (Q1.6)
+const tenantSearch = require('./src/handlers/tenantSearch');
+exports.searchTenantsCF = tenantSearch.searchTenantsCF;

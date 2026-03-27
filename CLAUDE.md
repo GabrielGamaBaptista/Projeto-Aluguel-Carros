@@ -133,23 +133,25 @@ date-fns                            (para differenceInDays em tasksService)
 ### `users/{userId}`
 ```javascript
 {
+  // === DOC PÚBLICO === (sem PII — Q1.2 Fase C)
   email: string,                    // email (lowercase)
   name: string,
   role: 'locador' | 'locatario',
-  phone: string,                    // apenas dígitos (ex: "11999998888")
   authProvider: 'email' | 'google',
   emailVerified: boolean,
   emailVerifiedAt: Timestamp | null,
   googlePhotoUrl: string | null,
 
-  // Dados pessoais (AMBOS os roles)
+  // === SUBCOLLECTION private/data === (PII — acesso apenas via admin SDK / CFs)
+  // users/{uid}/private/data
+  phone: string,                    // apenas dígitos (ex: "11999998888")
   cpf: string,                      // apenas dígitos (ex: "12345678900")
+  cnpj: string,                     // apenas dígitos; preenchido se PJ ou MEI
   birthDate: string,                // "DD/MM/AAAA"
   personType: 'pf' | 'pj' | 'mei', // só locador seleciona; locatário é sempre 'pf'
-  cnpj: string,                     // apenas dígitos; preenchido se PJ ou MEI
   companyName: string,              // razão social; preenchido se PJ ou MEI
 
-  // Endereço (AMBOS os roles)
+  // Endereço (em private/data)
   cep: string,
   street: string,
   number: string,
@@ -159,7 +161,7 @@ date-fns                            (para differenceInDays em tasksService)
   state: string,                    // UF (2 chars)
   address: string,                  // endereço completo formatado
 
-  // CNH e documentos (APENAS locatário)
+  // CNH e documentos (APENAS locatário — em private/data)
   cnhNumber: string,
   cnhCategory: string,              // "A", "B", "AB", "C", "D", "E", etc.
   cnhExpiry: string,                // "DD/MM/AAAA"
@@ -409,7 +411,7 @@ Composite indexes são bem-vindos e recomendados quando melhoram a performance d
 firebase deploy --only firestore:indexes
 ```
 
-### Registro de Índices Compostos (16 ativos)
+### Registro de Índices Compostos (20 ativos) + 3 fieldOverrides collection group
 
 | Coleção | Campos | Usado em |
 |---------|--------|----------|
@@ -425,10 +427,21 @@ firebase deploy --only firestore:indexes
 | `tasks` | status ↑ + dueDate ↑ | `notifyOverdueTasks` (cron) |
 | `tasks` | landlordId ↑ + status ↑ + dueDate ↑ | `getAllUserTasks` locador pending (Q9.5) |
 | `tasks` | landlordId ↑ + status ↑ + completedAt ↓ | `getAllUserTasks` locador completed (Q9.5) |
+| `tasks` | carId ↑ + tenantId ↑ + status ↑ + dueDate ↑ | `getCarTasks` locatario pending (Q8.2) |
+| `tasks` | carId ↑ + tenantId ↑ + status ↑ + completedAt ↓ | `getCarTasks` locatario completed (Q8.2) |
 | `tenantRequests` | carId ↑ + status ↑ | `getSentRequests` |
 | `tenantRequests` | carId ↑ + tenantId ↑ + status ↑ | `createContract` (validação) |
 | `tenantRequests` | tenantId ↑ + status ↑ + createdAt ↓ | `getPendingRequests` |
 | `charges` | landlordId ↑ + carId ↑ + dueDate ↓ | `getChargesByCar` (Q3.1) |
+| `rentalContracts` | carId ↑ + landlordId ↑ + active ↑ | `getContractByCar` locador (Q10.5) |
+| `rentalContracts` | carId ↑ + tenantId ↑ + active ↑ | `getContractByCar` locatario (Q10.5) |
+
+**fieldOverrides (collection group `private` — Q1.2 Fase C):**
+| Campo | queryScope | Usado em |
+|-------|-----------|----------|
+| `cpf` | COLLECTION_GROUP | `checkPiiUniqueCF`, `findEmailByIdentifierCF`, `searchTenantsCF` |
+| `cnpj` | COLLECTION_GROUP | `checkPiiUniqueCF`, `findEmailByIdentifierCF` |
+| `phone` | COLLECTION_GROUP | `checkPiiUniqueCF` |
 
 > **Manter esta tabela e o `firestore.indexes.json` atualizados** ao criar novos índices.
 > Exportar: `firebase firestore:indexes > firestore.indexes.json`
@@ -649,6 +662,11 @@ Eventos que geram notificações (salvas em `notifications/`):
 | `notifyOverdueTasks` | Scheduled (cron diário) | Notifica tarefas vencidas |
 | `assignTenantCF` | Callable | Atribui locatário ao carro atomicamente (Q1.4) |
 | `deleteCarCF` | Callable | Exclui carro com cascade completo (Q2.3) |
+| `getTenantDetailsCF` | Callable | Retorna PII do locatário via admin SDK (Q1.2) |
+| `deleteAccountCF` | Callable | Exclui conta com cascade LGPD (Q5.4) |
+| `checkPiiUniqueCF` | Callable (sem auth) | Verifica unicidade de CPF/CNPJ/phone via admin SDK (Q1.2 Fase C) |
+| `findEmailByIdentifierCF` | Callable (sem auth) | Busca email por CPF/CNPJ para login (Q1.2 Fase C) |
+| `searchTenantsCF` | Callable | Busca locatários por email ou CPF — restrito ao locador (Q1.6) |
 
 ### Push Notifications via Cloud Function
 - Trigger `sendPushNotification`: dispara ao criar qualquer documento em `notifications/{notifId}`
@@ -824,3 +842,7 @@ Todas as validações client-side ficam em `src/utils/validation.js`:
 16. **Contrato único por carro**: Cada carro pode ter no máximo 1 contrato ativo (`active: true`). A criação usa transação Firestore para prevenir race condition.
 
 17. **PermissionsScreen**: Tela adicionada no fluxo de onboarding, exibida após verificação de email (primeira vez). Solicita permissões de notificação antes de entrar no app.
+
+18. **PII em subcollection private** (Q1.2 Fase C): CPF, CNPJ e phone foram removidos do doc público `users/{uid}` e ficam apenas em `users/{uid}/private/data`. Checks de unicidade e login por CPF usam CFs `checkPiiUniqueCF` e `findEmailByIdentifierCF` (admin SDK). Queries da subcollection `private` precisam de fieldOverrides com queryScope COLLECTION_GROUP no firestore.indexes.json.
+
+19. **Secrets via defineSecret** (Q6.2): 5 secrets gerenciados via Firebase Secret Manager — ASAAS_API_KEY, ASAAS_PLATFORM_WALLET_ID, ASAAS_WEBHOOK_TOKEN, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET. Antes de novo deploy, configurar via `firebase functions:secrets:set <NAME>`. Configs nao-sensiveis (ASAAS_BASE_URL, ASAAS_PLATFORM_FEE_PERCENT, ASAAS_WEBHOOK_URL, CLOUDINARY_CLOUD_NAME) permanecem no .env.

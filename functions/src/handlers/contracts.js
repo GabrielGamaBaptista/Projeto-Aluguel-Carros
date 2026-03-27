@@ -1,14 +1,14 @@
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const admin = require('firebase-admin');
 const { generateBatchCharges, _createChargeInternal, calcNextDueDate } = require('./charges');
-const { createSubaccountClient } = require('../asaas/client');
+const { createSubaccountClient, ASAAS_PLATFORM_WALLET_ID } = require('../asaas/client');
 const { checkRateLimit } = require('../utils/rateLimiter');
 
 /**
  * Cancela atomicamente um contrato ativo e todas as cobranças PENDING/OVERDUE.
  * Se alguma cobrança falhar no Asaas, o contrato NÃO é marcado como inativo.
  */
-exports.cancelContract = onCall({ cors: true, invoker: 'public' }, async (request) => {
+exports.cancelContract = onCall({ cors: true, invoker: 'public', secrets: [ASAAS_PLATFORM_WALLET_ID] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Usuario nao autenticado.');
   }
@@ -172,7 +172,7 @@ exports.cancelContract = onCall({ cors: true, invoker: 'public' }, async (reques
   }
 });
 
-exports.createContract = onCall({ cors: true, invoker: 'public' }, async (request) => {
+exports.createContract = onCall({ cors: true, invoker: 'public', secrets: [ASAAS_PLATFORM_WALLET_ID] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Usuario nao autenticado.');
   }
@@ -314,7 +314,7 @@ exports.createContract = onCall({ cors: true, invoker: 'public' }, async (reques
 // ─── pauseContract ────────────────────────────────────────────────────────────
 // Alterna entre pausado (pausedAt != null) e ativo (pausedAt = null).
 // Contratos pausados sao ignorados pelo cron de cobranças recorrentes.
-exports.pauseContract = onCall({ cors: true, invoker: 'public' }, async (request) => {
+exports.pauseContract = onCall({ cors: true, invoker: 'public', secrets: [ASAAS_PLATFORM_WALLET_ID] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Usuario nao autenticado.');
   }
@@ -383,7 +383,7 @@ exports.pauseContract = onCall({ cors: true, invoker: 'public' }, async (request
 
 // ─── editContract ─────────────────────────────────────────────────────────────
 // Editar contrato: apenas rentAmount permanente
-exports.editContract = onCall({ cors: true, invoker: 'public' }, async (request) => {
+exports.editContract = onCall({ cors: true, invoker: 'public', secrets: [ASAAS_PLATFORM_WALLET_ID] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Usuario nao autenticado.');
   }

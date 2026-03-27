@@ -1,7 +1,8 @@
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const crypto = require('crypto');
+const { CLOUDINARY_API_KEY: CLOUDINARY_API_KEY_SECRET, CLOUDINARY_API_SECRET: CLOUDINARY_API_SECRET_SECRET } = require('../asaas/client');
 
-exports.getCloudinarySignature = onCall({ cors: true, invoker: 'public' }, async (request) => {
+exports.getCloudinarySignature = onCall({ cors: true, invoker: 'public', secrets: [CLOUDINARY_API_KEY_SECRET, CLOUDINARY_API_SECRET_SECRET] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Usuario nao autenticado.');
   }

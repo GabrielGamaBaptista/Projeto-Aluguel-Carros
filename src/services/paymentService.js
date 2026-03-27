@@ -1,5 +1,6 @@
 import { firestore, auth } from '../config/firebase';
 import functions from '@react-native-firebase/functions';
+import { withRetry } from '../utils/retry';
 
 const fn = () => functions();
 
@@ -78,20 +79,20 @@ const paymentService = {
   getChargesByCar: async (carId) => {
     try {
       const uid = auth().currentUser?.uid;
-      if (!uid) return [];
+      if (!uid) return { success: true, data: [] };
 
       // Query direta com carId (Q3.1 — usa indice composto landlordId+carId+dueDate)
-      const snapshot = await firestore()
+      const snapshot = await withRetry(() => firestore()
         .collection('charges')
         .where('landlordId', '==', uid)
         .where('carId', '==', carId)
         .orderBy('dueDate', 'desc')
-        .get();
+        .get());
 
-      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      return { success: true, data: snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) };
     } catch (error) {
       console.error('Error getting charges by car:', error);
-      return [];
+      return { success: false, error: error.message, data: [] };
     }
   },
 
@@ -102,20 +103,18 @@ const paymentService = {
   getTenantCharges: async () => {
     try {
       const uid = auth().currentUser?.uid;
-      if (!uid) throw new Error('User not authenticated');
+      if (!uid) return { success: true, data: [] };
 
-      const snapshot = await firestore()
+      const snapshot = await withRetry(() => firestore()
         .collection('charges')
         .where('tenantId', '==', uid)
-        .get();
+        .get());
 
       const charges = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-      // Client-side sort: dueDate desc
-      return charges.sort((a, b) => new Date(b.dueDate) - new Date(a.dueDate));
+      return { success: true, data: charges.sort((a, b) => new Date(b.dueDate) - new Date(a.dueDate)) };
     } catch (error) {
       console.error('Error getting tenant charges:', error);
-      return [];
+      return { success: false, error: error.message, data: [] };
     }
   },
 
@@ -130,7 +129,7 @@ const paymentService = {
   getTenantChargesPaginated: async ({ pageSize = 20, startAfter = null } = {}) => {
     try {
       const uid = auth().currentUser?.uid;
-      if (!uid) throw new Error('User not authenticated');
+      if (!uid) return { success: false, error: 'User not authenticated', data: [], lastDoc: null, hasMore: false };
 
       let query = firestore()
         .collection('charges')
@@ -142,15 +141,15 @@ const paymentService = {
         query = query.startAfter(startAfter);
       }
 
-      const snapshot = await query.get();
+      const snapshot = await withRetry(() => query.get());
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       const lastDoc = snapshot.docs[snapshot.docs.length - 1] || null;
       const hasMore = snapshot.docs.length === pageSize;
 
-      return { data, lastDoc, hasMore };
+      return { success: true, data, lastDoc, hasMore };
     } catch (error) {
       console.error('Error getting tenant charges paginated:', error);
-      return { data: [], lastDoc: null, hasMore: false };
+      return { success: false, error: error.message, data: [], lastDoc: null, hasMore: false };
     }
   },
 
@@ -267,7 +266,7 @@ const paymentService = {
   getPendingChargeByContract: async (contractId) => {
     try {
       const uid = auth().currentUser?.uid;
-      if (!uid) return null;
+      if (!uid) return { success: true, data: null };
       const snapshot = await firestore()
         .collection('charges')
         .where('contractId', '==', contractId)
@@ -277,45 +276,48 @@ const paymentService = {
         .map(doc => ({ id: doc.id, ...doc.data() }))
         .filter(c => c.status === 'PENDING')
         .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-      return pending.length > 0 ? pending[0] : null;
+      return { success: true, data: pending.length > 0 ? pending[0] : null };
     } catch (error) {
       console.error('Error getting pending charge by contract:', error);
-      return null;
+      return { success: false, error: error.message, data: null };
     }
   },
 
   getAllContractsForLandlord: async () => {
     try {
       const uid = auth().currentUser?.uid;
-      if (!uid) return [];
-      const snapshot = await firestore()
+      if (!uid) return { success: true, data: [] };
+      const snapshot = await withRetry(() => firestore()
         .collection('rentalContracts')
         .where('landlordId', '==', uid)
-        .get();
+        .get());
       const contracts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      return contracts.sort((a, b) => {
-        if (a.active !== b.active) return a.active ? -1 : 1;
-        return (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0);
-      });
+      return {
+        success: true,
+        data: contracts.sort((a, b) => {
+          if (a.active !== b.active) return a.active ? -1 : 1;
+          return (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0);
+        }),
+      };
     } catch (error) {
       console.error('Error getting all contracts:', error);
-      return [];
+      return { success: false, error: error.message, data: [] };
     }
   },
 
   getAllChargesForLandlord: async () => {
     try {
       const uid = auth().currentUser?.uid;
-      if (!uid) return [];
-      const snapshot = await firestore()
+      if (!uid) return { success: true, data: [] };
+      const snapshot = await withRetry(() => firestore()
         .collection('charges')
         .where('landlordId', '==', uid)
-        .get();
+        .get());
       const charges = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      return charges.sort((a, b) => new Date(b.dueDate) - new Date(a.dueDate));
+      return { success: true, data: charges.sort((a, b) => new Date(b.dueDate) - new Date(a.dueDate)) };
     } catch (error) {
       console.error('Error getting all charges:', error);
-      return [];
+      return { success: false, error: error.message, data: [] };
     }
   },
 
@@ -352,35 +354,59 @@ const paymentService = {
     };
   },
 
-  getContractByCar: async (carId) => {
+  // userRole: 'locador' | 'locatario' | null
+  // Se userRole for informado, usa query otimizada com active==true (Q10.5).
+  // Sem userRole, faz 2 queries (fallback retrocompativel).
+  getContractByCar: async (carId, userRole = null) => {
     try {
       const uid = auth().currentUser?.uid;
-      if (!uid) return null;
+      if (!uid) return { success: true, data: null };
 
-      // Query as landlord (carId + landlordId — no composite index needed)
-      let snapshot = await firestore()
-        .collection('rentalContracts')
-        .where('carId', '==', carId)
-        .where('landlordId', '==', uid)
-        .get();
+      if (userRole === 'locador') {
+        const snapshot = await withRetry(() => firestore()
+          .collection('rentalContracts')
+          .where('carId', '==', carId)
+          .where('landlordId', '==', uid)
+          .where('active', '==', true)
+          .get());
+        const doc = snapshot.docs[0];
+        return { success: true, data: doc ? { id: doc.id, ...doc.data() } : null };
+      }
 
-      let found = snapshot.docs.find(doc => doc.data().active === true);
-      if (found) return { id: found.id, ...found.data() };
+      if (userRole === 'locatario') {
+        const snapshot = await withRetry(() => firestore()
+          .collection('rentalContracts')
+          .where('carId', '==', carId)
+          .where('tenantId', '==', uid)
+          .where('active', '==', true)
+          .get());
+        const doc = snapshot.docs[0];
+        return { success: true, data: doc ? { id: doc.id, ...doc.data() } : null };
+      }
 
-      // Query as tenant (carId + tenantId — no composite index needed)
-      snapshot = await firestore()
-        .collection('rentalContracts')
-        .where('carId', '==', carId)
-        .where('tenantId', '==', uid)
-        .get();
-
-      found = snapshot.docs.find(doc => doc.data().active === true);
-      if (found) return { id: found.id, ...found.data() };
-
-      return null;
+      // Fallback: 2 queries em paralelo sem saber o role — filtrando active==true
+      const [landlordSnap, tenantSnap] = await Promise.all([
+        withRetry(() => firestore()
+          .collection('rentalContracts')
+          .where('carId', '==', carId)
+          .where('landlordId', '==', uid)
+          .where('active', '==', true)
+          .get()),
+        withRetry(() => firestore()
+          .collection('rentalContracts')
+          .where('carId', '==', carId)
+          .where('tenantId', '==', uid)
+          .where('active', '==', true)
+          .get()),
+      ]);
+      if (landlordSnap.docs.length > 0 && tenantSnap.docs.length > 0) {
+        console.warn('[getContractByCar] Integrity warning: user is both landlord and tenant for carId', carId);
+      }
+      const found = landlordSnap.docs[0] || tenantSnap.docs[0] || null;
+      return { success: true, data: found ? { id: found.id, ...found.data() } : null };
     } catch (error) {
       console.error('Error getting contract by car:', error);
-      return null;
+      return { success: false, error: error.message, data: null };
     }
   },
 
@@ -388,19 +414,19 @@ const paymentService = {
   getActiveContractForTenant: async () => {
     try {
       const uid = auth().currentUser?.uid;
-      if (!uid) return null;
-      const snapshot = await firestore()
+      if (!uid) return { success: true, data: null };
+      const snapshot = await withRetry(() => firestore()
         .collection('rentalContracts')
         .where('tenantId', '==', uid)
         .where('active', '==', true)
         .limit(1)
-        .get();
-      if (snapshot.empty) return null;
+        .get());
+      if (snapshot.empty) return { success: true, data: null };
       const doc = snapshot.docs[0];
-      return { id: doc.id, ...doc.data() };
+      return { success: true, data: { id: doc.id, ...doc.data() } };
     } catch (error) {
       console.error('Error getting active contract for tenant:', error);
-      return null;
+      return { success: false, error: error.message, data: null };
     }
   },
 };

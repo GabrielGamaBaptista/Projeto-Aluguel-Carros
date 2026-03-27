@@ -2,6 +2,7 @@
 import { firestore } from '../config/firebase';
 import { differenceInDays } from 'date-fns';
 import { notificationService } from './notificationService';
+import { withRetry } from '../utils/retry';
 
 // Tipos de tarefas
 export const TASK_TYPES = {
@@ -322,7 +323,7 @@ export const tasksService = {
 
   getTaskById: async (taskId) => {
     try {
-      const doc = await firestore().collection('tasks').doc(taskId).get();
+      const doc = await withRetry(() => firestore().collection('tasks').doc(taskId).get());
       if (doc.exists) return { success: true, data: { id: doc.id, ...doc.data() } };
       return { success: false, error: 'Task not found' };
     } catch (error) {
@@ -331,20 +332,26 @@ export const tasksService = {
     }
   },
 
-  getCarTasks: async (carId, status = 'pending') => {
+  // tenantId opcional: quando fornecido, filtra tasks do locatario especifico (Q8.2).
+  // Locador nao passa tenantId (ve todas as tasks do carro).
+  // Locatario passa o proprio uid (ve apenas suas tasks).
+  getCarTasks: async (carId, status = 'pending', tenantId = null) => {
     try {
-      const snapshot = await firestore()
+      let query = firestore()
         .collection('tasks')
         .where('carId', '==', carId)
-        .where('status', '==', status)
-        .get();
-      const tasks = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      tasks.sort((a, b) => {
-        const da = a.dueDate?.toDate?.() || new Date(0);
-        const db = b.dueDate?.toDate?.() || new Date(0);
-        return da - db;
-      });
-      return { success: true, data: tasks };
+        .where('status', '==', status);
+      if (tenantId) {
+        query = query.where('tenantId', '==', tenantId);
+      }
+      // Ordenacao server-side usando indices compostos (Q8.2 / Q9.5)
+      if (status === 'completed') {
+        query = query.orderBy('completedAt', 'desc');
+      } else {
+        query = query.orderBy('dueDate', 'asc');
+      }
+      const snapshot = await withRetry(() => query.get());
+      return { success: true, data: snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) };
     } catch (error) {
       console.error('Get tasks error:', error);
       return { success: false, error: error.message };

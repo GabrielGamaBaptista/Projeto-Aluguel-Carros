@@ -38,6 +38,11 @@ const SERVICES = [
   'deleteaccountcf',
   // Adicionados no batch 4 (Q5.12):
   'pausecontract',
+  // Adicionados no batch 5 (Q1.2 Fase C):
+  'checkpiiuniquecf',
+  'findemailbyidentifiercf',
+  // Adicionados no batch 5 (Q1.6):
+  'searchtenantscf',
 ];
 
 function getAccessToken() {

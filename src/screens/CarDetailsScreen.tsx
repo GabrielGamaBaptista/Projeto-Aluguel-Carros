@@ -53,16 +53,26 @@ const CarDetailsScreen = ({ route, navigation }) => {
     if (!isRefresh) setLoading(true);
     try {
       const currentUser = authService.getCurrentUser();
+      let profile = userProfile;
       if (currentUser && !userProfile) {
         const profileResult = await authService.getCurrentUserProfile(currentUser.uid);
-        if (profileResult.success) setUserProfile(profileResult.data);
+        if (profileResult.success) {
+          setUserProfile(profileResult.data);
+          profile = profileResult.data;
+        }
       }
+
+      // Locatario filtra tasks pelo proprio uid para nao ver tasks de locatarios anteriores (Q8.2).
+      // Se profile nao carregado (falha), nao filtrar — locador nao perde acesso; locatario sem profile
+      // ja nao consegue navegar ate esta tela normalmente.
+      const isDefinitelyTenant = profile?.role === 'locatario';
+      const tenantFilterId = isDefinitelyTenant ? currentUser?.uid : null;
 
       // Buscar carro e tarefas em paralelo
       const [carResult, tasksResult, completedResult] = await Promise.all([
         carsService.getCarById(carId),
-        tasksService.getCarTasks(carId, 'pending'),
-        tasksService.getCarTasks(carId, 'completed'),
+        tasksService.getCarTasks(carId, 'pending', tenantFilterId),
+        tasksService.getCarTasks(carId, 'completed', tenantFilterId),
       ]);
 
       if (carResult.success) {

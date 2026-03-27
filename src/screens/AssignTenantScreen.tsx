@@ -9,7 +9,7 @@ import { showMessage } from 'react-native-flash-message';
 import { carsService } from '../services/carsService';
 import { authService } from '../services/authService';
 import { tenantRequestService } from '../services/tenantRequestService';
-import { firestore } from '../config/firebase';
+import { usersService } from '../services/usersService';
 
 const AssignTenantScreen = ({ route, navigation }) => {
   const { carId } = route.params;
@@ -52,32 +52,14 @@ const AssignTenantScreen = ({ route, navigation }) => {
 
     setSearching(true);
     try {
-      const isCpfSearch = /^\d+$/.test(query.replace(/[\.\-]/g, ''));
-      let results = [];
-
-      if (isCpfSearch) {
-        const cleanCpf = query.replace(/\D/g, '');
-        // Query simples por CPF, filtrar role no client
-        const snapshot = await firestore().collection('users')
-          .where('cpf', '==', cleanCpf)
-          .limit(5).get();
-        results = snapshot.docs
-          .map(d => ({ id: d.id, ...d.data() }))
-          .filter(u => u.role === 'locatario');
-      } else {
-        // Query por email range, filtrar role no client
-        const snapshot = await firestore().collection('users')
-          .where('email', '>=', query)
-          .where('email', '<=', query + '\uf8ff')
-          .limit(20).get();
-        results = snapshot.docs
-          .map(d => ({ id: d.id, ...d.data() }))
-          .filter(u => u.role === 'locatario')
-          .slice(0, 10);
+      const result = await usersService.searchTenants(query);
+      if (!result.success) {
+        Alert.alert('Erro', result.error || 'Erro ao buscar locatario.');
+        setSearching(false);
+        return;
       }
-
-      setSearchResults(results);
-      if (results.length === 0) {
+      setSearchResults(result.data);
+      if (result.data.length === 0) {
         Alert.alert('Nenhum resultado', 'Nenhum locatario encontrado com esses dados. Verifique se ele ja possui conta no app.');
       }
     } catch (error) {
@@ -151,12 +133,6 @@ const AssignTenantScreen = ({ route, navigation }) => {
     ]);
   };
 
-  const formatCpf = (cpf) => {
-    if (!cpf) return '';
-    const c = cpf.replace(/\D/g, '');
-    if (c.length !== 11) return cpf;
-    return c.slice(0, 3) + '.' + c.slice(3, 6) + '.' + c.slice(6, 9) + '-' + c.slice(9);
-  };
 
   if (loadingData) return <View style={styles.center}><ActivityIndicator size="large" color="#4F46E5" /></View>;
 
@@ -207,7 +183,6 @@ const AssignTenantScreen = ({ route, navigation }) => {
                     <View style={styles.resultInfo}>
                       <Text style={styles.resultName}>{tenant.name}</Text>
                       <Text style={styles.resultEmail}>{tenant.email}</Text>
-                      {tenant.cpf && <Text style={styles.resultCpf}>CPF: {formatCpf(tenant.cpf)}</Text>}
                     </View>
                     <View style={styles.sendBadge}>
                       <Text style={styles.sendBadgeText}>Enviar</Text>

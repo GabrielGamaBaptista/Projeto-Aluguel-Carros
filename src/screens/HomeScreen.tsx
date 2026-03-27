@@ -104,7 +104,7 @@ const HomeScreen = ({ navigation }) => {
         {
           text: 'Aceitar', onPress: async () => {
             setAcceptingId(request.id);
-            const result = await tenantRequestService.acceptRequest(request.id);
+            const result = await tenantRequestService.acceptRequest(request.id, request.carId);
             setAcceptingId(null);
             if (result.success) {
               showMessage({ message: 'Voce foi atribuido ao carro com sucesso!', type: 'success' });

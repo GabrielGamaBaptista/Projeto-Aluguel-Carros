@@ -2,6 +2,7 @@
 import { firestore, auth } from '../config/firebase';
 import { notificationService } from './notificationService';
 import functions from '@react-native-firebase/functions';
+import { carCache } from '../utils/cache';
 
 export const tenantRequestService = {
   // Enviar solicitacao de atribuicao
@@ -93,10 +94,11 @@ export const tenantRequestService = {
   // Aceitar solicitacao — delega para Cloud Function assignTenantCF (Q1.4)
   // A CF valida atomicamente: request pendente + carro disponivel + tenant sem carro
   // e usa admin SDK para atribuir sem depender do Caso 3 das Firestore rules.
-  acceptRequest: async (requestId) => {
+  acceptRequest: async (requestId, carId = null) => {
     try {
       const assignTenantFn = functions().httpsCallable('assignTenantCF');
       const result = await assignTenantFn({ requestId });
+      if (result.data?.success && carId) carCache.invalidate(carId);
       return result.data;
     } catch (error) {
       console.error('Accept request error:', error);
@@ -107,9 +109,11 @@ export const tenantRequestService = {
   // Recusar solicitacao
   rejectRequest: async (requestId, landlordId, carInfo, carId) => {
     try {
+      const ttlAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
       await firestore().collection('tenantRequests').doc(requestId).update({
         status: 'rejected',
         respondedAt: firestore.FieldValue.serverTimestamp(),
+        ttlAt,
       });
 
       // Notificar locador
@@ -132,9 +136,11 @@ export const tenantRequestService = {
   // Cancelar solicitacao (pelo locador)
   cancelRequest: async (requestId) => {
     try {
+      const ttlAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
       await firestore().collection('tenantRequests').doc(requestId).update({
         status: 'cancelled',
         respondedAt: firestore.FieldValue.serverTimestamp(),
+        ttlAt,
       });
       return { success: true };
     } catch (error) {

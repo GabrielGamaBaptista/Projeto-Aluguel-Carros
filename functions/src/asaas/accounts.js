@@ -2,7 +2,7 @@
  * Módulo para gerenciamento de contas do Asaas.
  * Realiza a criação de subcontas para locadores utilizando a API Key da plataforma.
  */
-const { asaasClient } = require('./client');
+const { getMainClient } = require('./client');
 
 /**
  * Mapeia o tipo de pessoa do app (pf, pj, mei) para o companyType esperado pelo Asaas.
@@ -74,7 +74,7 @@ const createSubaccount = async (data) => {
       payload.companyType = mapPersonTypeToAsaas(data.personType);
     }
 
-    const response = await asaasClient.post('/accounts', payload);
+    const response = await getMainClient().post('/accounts', payload);
     return response.data;
   } catch (error) {
     const asaasErrors = error.response?.data?.errors || [];
@@ -85,7 +85,7 @@ const createSubaccount = async (data) => {
     if (emailInUse) {
       // Conta já existe no Asaas — busca pelo CPF/CNPJ para recuperar apiKey
       console.log('Email já em uso no Asaas. Buscando conta existente pelo CPF/CNPJ...');
-      const search = await asaasClient.get('/accounts', {
+      const search = await getMainClient().get('/accounts', {
         params: { cpfCnpj: data.cpfCnpj }
       });
       const existing = search.data?.data?.[0];

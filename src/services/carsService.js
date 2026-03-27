@@ -4,6 +4,8 @@ import { tasksService } from './tasksService';
 import paymentService from './paymentService';
 import { notificationService } from './notificationService';
 import functions from '@react-native-firebase/functions';
+import { withRetry } from '../utils/retry';
+import { carCache } from '../utils/cache';
 
 export const carsService = {
   addCar: async (carData) => {
@@ -30,6 +32,7 @@ export const carsService = {
         ...updates,
         updatedAt: firestore.FieldValue.serverTimestamp(),
       });
+      carCache.invalidate(carId);
       return { success: true };
     } catch (error) {
       console.error('Update car error:', error);
@@ -42,6 +45,7 @@ export const carsService = {
     try {
       const deleteCarFn = functions().httpsCallable('deleteCarCF');
       const result = await deleteCarFn({ carId });
+      carCache.invalidate(carId);
       return result.data;
     } catch (error) {
       console.error('Delete car error:', error);
@@ -72,9 +76,14 @@ export const carsService = {
 
   getCarById: async (carId) => {
     try {
-      const doc = await firestore().collection('cars').doc(carId).get();
+      const cached = carCache.get(carId);
+      if (cached) return { success: true, data: cached };
+
+      const doc = await withRetry(() => firestore().collection('cars').doc(carId).get());
       if (doc.exists) {
-        return { success: true, data: { id: doc.id, ...doc.data() } };
+        const data = { id: doc.id, ...doc.data() };
+        carCache.set(carId, data);
+        return { success: true, data };
       } else {
         return { success: false, error: 'Car not found' };
       }
@@ -131,6 +140,7 @@ export const carsService = {
         status: 'available',
         rentedAt: null,
       });
+      carCache.invalidate(carId);
       await tasksService.deleteTasksByCar(carId);
 
       // Notificar locatario que foi removido do carro

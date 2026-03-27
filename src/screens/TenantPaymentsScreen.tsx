@@ -64,14 +64,14 @@ export default function TenantPaymentsScreen() {
   };
 
   const loadData = useCallback(async () => {
-    const [chargesResult, contract] = await Promise.all([
+    const [chargesResult, contractResult] = await Promise.all([
       paymentService.getTenantChargesPaginated({ pageSize: 20 }),
       paymentService.getActiveContractForTenant(),
     ]);
     setCharges(sortCharges(chargesResult.data));
     setLastDoc(chargesResult.lastDoc);
     setHasMore(chargesResult.hasMore);
-    setActiveContract(contract);
+    setActiveContract(contractResult.data || null);
   }, []);
 
   useEffect(() => {

@@ -1,13 +1,13 @@
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const admin = require('firebase-admin');
 const { createSubaccount } = require('../asaas/accounts');
-const { createSubaccountClient, config } = require('../asaas/client');
+const { createSubaccountClient, config, ASAAS_API_KEY, ASAAS_WEBHOOK_TOKEN } = require('../asaas/client');
 
 /**
  * Cloud Function Callable para criar uma subconta no Asaas para o locador.
  * Salva a apiKey retornada no Firestore para uso posterior em cobranças.
  */
-exports.createAsaasSubaccount = onCall({ cors: true, invoker: 'public' }, async (request) => {
+exports.createAsaasSubaccount = onCall({ cors: true, invoker: 'public', secrets: [ASAAS_API_KEY, ASAAS_WEBHOOK_TOKEN] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'O usuário deve estar autenticado.');
   }

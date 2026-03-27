@@ -1,5 +1,9 @@
 // src/services/authService.js
 import { auth, firestore } from '../config/firebase';
+import { clearAllCaches } from '../utils/cache';
+import functions from '@react-native-firebase/functions';
+
+const fn = () => functions();
 
 let GoogleSignin = null;
 try {
@@ -14,17 +18,18 @@ export const authService = {
     try {
       const cleanCpf = cpf.replace(/\D/g, '');
       if (cleanCpf.length !== 11) return { exists: false };
-      const snapshot = await firestore().collection('users').where('cpf', '==', cleanCpf).limit(1).get();
-      return { exists: !snapshot.empty };
+      const result = await fn().httpsCallable('checkPiiUniqueCF')({ cpf: cleanCpf });
+      return { exists: !!result.data.cpfExists };
     } catch (error) { return { exists: false }; }
   },
 
   checkDocumentExists: async (value, type) => {
     try {
       const clean = value.replace(/\D/g, '');
-      const field = type === 'cnpj' ? 'cnpj' : 'cpf';
-      const snapshot = await firestore().collection('users').where(field, '==', clean).limit(1).get();
-      return { exists: !snapshot.empty };
+      const payload = type === 'cnpj' ? { cnpj: clean } : { cpf: clean };
+      const result = await fn().httpsCallable('checkPiiUniqueCF')(payload);
+      const exists = type === 'cnpj' ? !!result.data.cnpjExists : !!result.data.cpfExists;
+      return { exists };
     } catch (error) { return { exists: false }; }
   },
 
@@ -39,8 +44,8 @@ export const authService = {
     try {
       const cleanPhone = phone.replace(/\D/g, '');
       if (cleanPhone.length < 10) return { exists: false };
-      const snapshot = await firestore().collection('users').where('phone', '==', cleanPhone).limit(1).get();
-      return { exists: !snapshot.empty };
+      const result = await fn().httpsCallable('checkPiiUniqueCF')({ phone: cleanPhone });
+      return { exists: !!result.data.phoneExists };
     } catch (error) { return { exists: false }; }
   },
 
@@ -70,19 +75,16 @@ export const authService = {
       const user = userCredential.user;
       try { await user.sendEmailVerification(); } catch (e) { console.error('Verify email error:', e); }
 
-      // Doc publico: dados de acesso, busca e autenticacao.
-      // Fase A (Q1.2): phone ainda duplicado aqui para checkPhoneExists funcionar.
-      // Batch 4 (Fase C): remover phone do publico apos migrar checkPhoneExists para admin SDK.
+      // Doc publico: apenas dados de acesso e autenticacao (sem PII).
+      // Q1.2 Fase C: cpf, cnpj e phone removidos — ficam somente em private/data.
       const publicData = {
         email: cleanEmail, name: userData.name || '', role: userData.role,
         emailVerified: false, authProvider: 'email',
-        cpf: userData.cpf || '', cnpj: userData.cnpj || '',
-        phone: userData.phone || '',
         createdAt: firestore.FieldValue.serverTimestamp(),
       };
 
-      // Private sub-doc: PII completo (phone, cpf, cnpj, endereco, dados pessoais, CNH)
-      // cpf/cnpj ficam em ambos os docs na Fase A para checkCpfExists/login funcionar.
+      // Private sub-doc: PII completo (phone, cpf, cnpj, endereco, dados pessoais, CNH).
+      // Queries de unicidade e login por CPF usam admin SDK via CF — nao mais o doc publico.
       const privateData = {
         phone: userData.phone || '',
         cpf: userData.cpf || '',
@@ -179,22 +181,19 @@ export const authService = {
         if (phoneCheck.exists) return { success: false, error: 'Este numero ja esta cadastrado.' };
       }
 
-      // Doc publico: dados de acesso, busca e autenticacao.
-      // Fase A (Q1.2): phone ainda duplicado aqui para checkPhoneExists funcionar.
-      // Batch 4 (Fase C): remover phone do publico apos migrar checkPhoneExists para admin SDK.
+      // Doc publico: apenas dados de acesso e autenticacao (sem PII).
+      // Q1.2 Fase C: cpf, cnpj e phone removidos — ficam somente em private/data.
       const publicData = {
         email: user.email, name: userData.name || user.displayName || '',
         role: userData.role,
         emailVerified: true, emailVerifiedAt: firestore.FieldValue.serverTimestamp(),
         authProvider: 'google', googlePhotoUrl: user.photoURL || '',
         profilePhoto: userData.profilePhoto || null,
-        cpf: userData.cpf || '', cnpj: userData.cnpj || '',
-        phone: userData.phone || '',
         createdAt: firestore.FieldValue.serverTimestamp(),
       };
 
-      // Private sub-doc: PII completo (phone, cpf, cnpj, endereco, dados pessoais, CNH)
-      // cpf/cnpj ficam em ambos os docs na Fase A para checkCpfExists/login funcionar.
+      // Private sub-doc: PII completo (phone, cpf, cnpj, endereco, dados pessoais, CNH).
+      // Queries de unicidade e login por CPF usam admin SDK via CF — nao mais o doc publico.
       const privateData = {
         phone: userData.phone || '',
         cpf: userData.cpf || '',
@@ -217,8 +216,9 @@ export const authService = {
       }
 
       // Escrita atomica: doc publico + private/data num batch
+      // merge:true no doc publico — defensivo para edge cases no fluxo Google (conta parcial preexistente)
       const batch = firestore().batch();
-      batch.set(firestore().collection('users').doc(userId), publicData);
+      batch.set(firestore().collection('users').doc(userId), publicData, { merge: true });
       batch.set(
         firestore().collection('users').doc(userId).collection('private').doc('data'),
         privateData
@@ -272,26 +272,26 @@ export const authService = {
     try {
       const cleanCpf = cpf.replace(/\D/g, '');
       if (cleanCpf.length !== 11) return { success: false, error: 'CPF invalido.' };
-      const snapshot = await firestore().collection('users').where('cpf', '==', cleanCpf).get();
-      if (snapshot.empty) return { success: false, error: 'CPF ou senha incorretos.' };
-      return { success: true, email: snapshot.docs[0].data().email };
-    } catch (error) { return { success: false, error: 'Erro ao buscar usuario.' }; }
+      const result = await fn().httpsCallable('findEmailByIdentifierCF')({ identifier: cleanCpf });
+      return result.data;
+    } catch (error) {
+      const msg = error?.message || 'Erro ao buscar usuario.';
+      return { success: false, error: msg };
+    }
   },
 
   findEmailByIdentifier: async (identifier) => {
     try {
       const clean = identifier.replace(/\D/g, '');
-      if (clean.length === 11) {
-        const snapshot = await firestore().collection('users').where('cpf', '==', clean).get();
-        if (snapshot.empty) return { success: false, error: 'CPF ou senha incorretos.' };
-        return { success: true, email: snapshot.docs[0].data().email };
-      } else if (clean.length === 14) {
-        const snapshot = await firestore().collection('users').where('cnpj', '==', clean).get();
-        if (snapshot.empty) return { success: false, error: 'CNPJ ou senha incorretos.' };
-        return { success: true, email: snapshot.docs[0].data().email };
+      if (clean.length !== 11 && clean.length !== 14) {
+        return { success: false, error: 'Identificador invalido.' };
       }
-      return { success: false, error: 'Identificador invalido.' };
-    } catch (error) { return { success: false, error: 'Erro ao buscar usuario.' }; }
+      const result = await fn().httpsCallable('findEmailByIdentifierCF')({ identifier: clean });
+      return result.data;
+    } catch (error) {
+      const msg = error?.message || 'Erro ao buscar usuario.';
+      return { success: false, error: msg };
+    }
   },
 
   loginWithCpf: async (cpf, password) => {
@@ -350,6 +350,7 @@ export const authService = {
       }
       if (GoogleSignin) { try { await GoogleSignin.signOut(); } catch (e) {} }
       await auth().signOut();
+      clearAllCaches();
       return { success: true };
     } catch (error) { return { success: false, error: error.message }; }
   },

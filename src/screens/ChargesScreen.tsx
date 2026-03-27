@@ -42,12 +42,12 @@ const ChargesScreen: React.FC<Props> = ({ route }) => {
 
   const fetchData = useCallback(async () => {
     try {
-      const [contractData, chargesData] = await Promise.all([
-        paymentService.getContractByCar(carId),
+      const [contractResult, chargesResult] = await Promise.all([
+        paymentService.getContractByCar(carId, 'locador'),
         paymentService.getChargesByCar(carId)
       ]);
-      setContract(contractData);
-      setCharges(chargesData || []);
+      setContract(contractResult.data || null);
+      setCharges(chargesResult.data || []);
     } catch (error) {
       console.error('Error fetching charges data:', error);
       Alert.alert('Erro', 'Falha ao carregar cobranças.');

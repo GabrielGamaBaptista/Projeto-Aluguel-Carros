@@ -1,6 +1,8 @@
 // src/services/usersService.js
 import { firestore } from '../config/firebase';
 import functions from '@react-native-firebase/functions';
+import { withRetry } from '../utils/retry';
+import { userCache } from '../utils/cache';
 
 const fn = () => functions();
 
@@ -8,10 +10,10 @@ export const usersService = {
   // Obter todos os locatários disponíveis
   getAvailableTenants: async () => {
     try {
-      const snapshot = await firestore()
+      const snapshot = await withRetry(() => firestore()
         .collection('users')
         .where('role', '==', 'locatario')
-        .get();
+        .get());
       
       const tenants = snapshot.docs.map(doc => ({
         id: doc.id,
@@ -25,12 +27,17 @@ export const usersService = {
     }
   },
 
-  // Obter usuário por ID
+  // Obter usuário por ID (com cache de 5min em memória — Q3.6)
   getUserById: async (userId) => {
     try {
-      const doc = await firestore().collection('users').doc(userId).get();
+      const cached = userCache.get(userId);
+      if (cached) return { success: true, data: cached };
+
+      const doc = await withRetry(() => firestore().collection('users').doc(userId).get());
       if (doc.exists) {
-        return { success: true, data: { id: doc.id, ...doc.data() } };
+        const data = { id: doc.id, ...doc.data() };
+        userCache.set(userId, data);
+        return { success: true, data };
       } else {
         return { success: false, error: 'User not found' };
       }
@@ -45,7 +52,7 @@ export const usersService = {
   getTenantDetails: async (tenantId) => {
     try {
       const getTenantDetailsFn = fn().httpsCallable('getTenantDetailsCF');
-      const result = await getTenantDetailsFn({ tenantId });
+      const result = await withRetry(() => getTenantDetailsFn({ tenantId }));
       return result.data;
     } catch (error) {
       console.error('Get tenant details error:', error);
@@ -53,25 +60,15 @@ export const usersService = {
     }
   },
 
-  // Buscar usuários por email (para atribuir locatário)
-  searchUsersByEmail: async (emailQuery) => {
+  // Buscar locatarios por email ou CPF via Cloud Function segura (Q1.6).
+  // Substitui queries client-side diretas que expunham dados de todos os locatarios.
+  searchTenants: async (query) => {
     try {
-      const snapshot = await firestore()
-        .collection('users')
-        .where('role', '==', 'locatario')
-        .where('email', '>=', emailQuery)
-        .where('email', '<=', emailQuery + '\uf8ff')
-        .limit(10)
-        .get();
-      
-      const users = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      
-      return { success: true, data: users };
+      const searchTenantsFn = fn().httpsCallable('searchTenantsCF');
+      const result = await searchTenantsFn({ query });
+      return { success: true, data: result.data };
     } catch (error) {
-      console.error('Search users error:', error);
+      console.error('Search tenants error:', error);
       return { success: false, error: error.message };
     }
   },

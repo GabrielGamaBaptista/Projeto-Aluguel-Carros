@@ -1,9 +1,10 @@
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
+const { logger } = require('firebase-functions/v2');
 const admin = require('firebase-admin');
 const { createOrGetCustomer } = require('../asaas/customers');
 const { createPayment, getPixQrCode: asaasGetPixQrCode } = require('../asaas/payments');
-const { createSubaccountClient } = require('../asaas/client');
+const { createSubaccountClient, ASAAS_PLATFORM_WALLET_ID } = require('../asaas/client');
 const { checkRateLimit } = require('../utils/rateLimiter');
 
 /**
@@ -101,7 +102,7 @@ const _createChargeInternal = async (data) => {
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
   } catch (notifErr) {
-    console.error('Erro ao criar notificacao de cobranca:', notifErr.message);
+    logger.error('charge.notificationError', { error: notifErr.message });
   }
 
   return {
@@ -114,7 +115,7 @@ const _createChargeInternal = async (data) => {
 /**
  * Cloud Function Callable para criação manual de cobrança.
  */
-exports.createCharge = onCall({ cors: true, invoker: 'public' }, async (request) => {
+exports.createCharge = onCall({ cors: true, invoker: 'public', secrets: [ASAAS_PLATFORM_WALLET_ID] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'O usuário deve estar autenticado.');
   }
@@ -177,14 +178,14 @@ exports.createCharge = onCall({ cors: true, invoker: 'public' }, async (request)
           }
         }
       } catch (err) {
-        console.error('Erro ao avancar nextDueDate apos createCharge:', err);
+        logger.error('charge.nextDueDateAdvanceError', { contractId: data.contractId, error: err.message });
       }
     }
 
     return result;
   } catch (error) {
     if (error instanceof HttpsError) throw error;
-    console.error('Erro ao criar cobranca:', error);
+    logger.error('charge.create.error', { error: error.message });
     throw new HttpsError('internal', 'Erro interno. Tente novamente mais tarde.');
   }
 });
@@ -288,7 +289,7 @@ const generateBatchCharges = async (contractId, contractData, afterDate, db) => 
         // Marcar override como consumido apos primeira criacao bem-sucedida
         if (!overrideUsed && overrideAmount !== null) overrideUsed = true;
       } catch (err) {
-        console.error(`[generateBatchCharges] Erro ao criar cobranca semanal ${dueDate} para contrato ${contractId}:`, err);
+        logger.error('charge.batch.createError', { contractId, dueDate, error: err.message });
         // Fix 3: registrar a primeira data que falhou
         if (!firstFailedDate) firstFailedDate = dueDate;
       }
@@ -365,7 +366,7 @@ const generateBatchCharges = async (contractId, contractData, afterDate, db) => 
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
     } catch (err) {
-      console.error(`[generateBatchCharges] Erro ao criar cobranca quinzenal ${afterDate} para contrato ${contractId}:`, err);
+      logger.error('charge.batch.createError', { contractId, dueDate: afterDate, error: err.message });
       // Nao avanca nextDueDate — cron retentara no proximo ciclo
     }
   }
@@ -376,8 +377,9 @@ const generateBatchCharges = async (contractId, contractData, afterDate, db) => 
  * Executa todos os dias às 08h00 no fuso horário de São Paulo.
  */
 exports.generateRecurringCharges = onSchedule(
-  { schedule: '0 8 * * *', timeZone: 'America/Sao_Paulo' },
+  { schedule: '0 8 * * *', timeZone: 'America/Sao_Paulo', secrets: [ASAAS_PLATFORM_WALLET_ID] },
   async (event) => {
+    const cronStart = Date.now();
     const db = admin.firestore();
     const now = new Date();
 
@@ -401,7 +403,7 @@ exports.generateRecurringCharges = onSchedule(
 
     const contractDocs = activeContracts.docs;
 
-    console.log(`Verificando ${contractDocs.length} contratos ativos para recorrencia.`);
+    logger.info('cron.generateRecurringCharges.start', { totalActiveContracts: contractDocs.length });
 
     // Q2.7: processar contratos em batches de 5 para evitar rate limit no Asaas
     const BATCH_SIZE = 5;
@@ -441,7 +443,7 @@ exports.generateRecurringCharges = onSchedule(
               .get();
 
             if (!existingChargeQuery.empty && existingChargeQuery.docs[0].data().status !== 'CANCELLED') {
-              console.log(`Cobranca ja existe para contrato ${contractId} no vencimento ${nextDueDate}. Atualizando nextDueDate.`);
+              logger.info(`Cobranca ja existe para contrato ${contractId} no vencimento ${nextDueDate}. Atualizando nextDueDate.`);
               const nextDateStr = calcNextDueDate(nextDueDate, frequency, dayOfMonth);
               await db.collection('rentalContracts').doc(contractId).update({
                 nextDueDate: nextDateStr,
@@ -473,12 +475,12 @@ exports.generateRecurringCharges = onSchedule(
               updatedAt: admin.firestore.FieldValue.serverTimestamp()
             });
 
-            console.log(`Contrato ${contractId} processado. Novo vencimento: ${nextDateStr}`);
+            logger.info(`Contrato ${contractId} processado. Novo vencimento: ${nextDateStr}`);
           }
           processedCount++;
         } catch (err) {
           errorCount++;
-          console.error(`Erro ao processar contrato recorrente ${contractId}:`, err);
+          logger.error('cron.recurring.contractError', { contractId, error: err.message });
           try {
             await db.collection('rentalContracts').doc(contractId).update({
               lastRecurringError: err.message || 'Erro desconhecido',
@@ -486,7 +488,7 @@ exports.generateRecurringCharges = onSchedule(
               updatedAt: admin.firestore.FieldValue.serverTimestamp(),
             });
           } catch (updateErr) {
-            console.error(`Erro ao registrar falha no contrato ${contractId}:`, updateErr);
+            logger.error('cron.recurring.updateError', { contractId, error: updateErr.message });
           }
         }
       }));
@@ -496,8 +498,6 @@ exports.generateRecurringCharges = onSchedule(
         await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS));
       }
     }
-
-    console.log(`[generateRecurringCharges] Concluido: ${processedCount} contratos processados, ${errorCount} com erro de ${activeContracts.size} ativos.`);
 
     // Notificar locatarios sobre cobranças próximas do vencimento (3 dias)
     try {
@@ -511,7 +511,7 @@ exports.generateRecurringCharges = onSchedule(
         .where('dueDate', '==', threeDaysStr)
         .get();
 
-      console.log(`Verificando ${upcomingCharges.size} cobrancas com vencimento em 3 dias.`);
+      logger.info(`Verificando ${upcomingCharges.size} cobrancas com vencimento em 3 dias.`);
 
       for (const doc of upcomingCharges.docs) {
         const chargeData = doc.data();
@@ -538,12 +538,19 @@ exports.generateRecurringCharges = onSchedule(
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
           });
         } catch (notifErr) {
-          console.error(`Erro ao criar notificacao de vencimento proximo para cobranca ${doc.id}:`, notifErr.message);
+          logger.error('cron.upcoming.notificationError', { chargeId: doc.id, error: notifErr.message });
         }
       }
     } catch (upcomingErr) {
-      console.error('Erro ao verificar cobrancas proximas do vencimento:', upcomingErr.message);
+      logger.error('cron.upcoming.checkError', { error: upcomingErr.message });
     }
+
+    logger.info('cron.generateRecurringCharges.completed', {
+      processedCount,
+      errorCount,
+      totalActiveContracts: activeContracts.size,
+      executionTimeMs: Date.now() - cronStart,
+    });
 
     return null;
   });
@@ -555,7 +562,7 @@ exports.calcNextDueDate = calcNextDueDate;
 
 // ─── cancelCharge ─────────────────────────────────────────────────────────────
 // Cancelar cobrança — só permitido se status != RECEIVED e != CONFIRMED
-exports.cancelCharge = onCall({ cors: true, invoker: 'public' }, async (request) => {
+exports.cancelCharge = onCall({ cors: true, invoker: 'public', secrets: [ASAAS_PLATFORM_WALLET_ID] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Usuario nao autenticado.');
   }
@@ -624,7 +631,7 @@ exports.cancelCharge = onCall({ cors: true, invoker: 'public' }, async (request)
             }
           } catch (syncError) {
             if (syncError instanceof HttpsError) throw syncError;
-            console.error('Erro ao buscar status real no Asaas:', syncError.message);
+            logger.error('charge.cancel.syncStatusError', { error: syncError.message });
           }
 
           throw asaasError;
@@ -656,19 +663,19 @@ exports.cancelCharge = onCall({ cors: true, invoker: 'public' }, async (request)
         });
       }
     } catch (notifErr) {
-      console.error('Erro ao criar notificacao de cancelamento de cobranca:', notifErr.message);
+      logger.error('charge.notificationError', { chargeId, error: notifErr.message });
     }
 
     return { success: true };
   } catch (error) {
     if (error instanceof HttpsError) throw error;
-    console.error('Erro ao cancelar cobranca:', error);
+    logger.error('charge.cancel.error', { error: error.message });
     throw new HttpsError('internal', 'Erro interno. Tente novamente mais tarde.');
   }
 });
 
 // ─── editCharge ───────────────────────────────────────────────────────────────
-exports.editCharge = onCall({ cors: true, invoker: 'public' }, async (request) => {
+exports.editCharge = onCall({ cors: true, invoker: 'public', secrets: [ASAAS_PLATFORM_WALLET_ID] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Usuario nao autenticado.');
   }
@@ -796,7 +803,7 @@ exports.editCharge = onCall({ cors: true, invoker: 'public' }, async (request) =
     } catch (asaasError) {
       if (asaasError.response?.status !== 404) {
         // Nova cobranca ja foi criada e Firestore ja foi atualizado — nao falha, mas loga
-        console.error('Aviso: nao foi possivel cancelar cobranca antiga no Asaas:', asaasError.response?.data || asaasError.message);
+        logger.error('charge.edit.deleteOldAsaasError', { error: asaasError.message });
       }
     }
 
@@ -819,19 +826,19 @@ exports.editCharge = onCall({ cors: true, invoker: 'public' }, async (request) =
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       });
     } catch (notifErr) {
-      console.error('Erro ao criar notificacao de edicao de cobranca:', notifErr.message);
+      logger.error('charge.notificationError', { chargeId: targetChargeId, error: notifErr.message });
     }
 
     return { success: true, chargeId: targetChargeId };
   } catch (error) {
     if (error instanceof HttpsError) throw error;
-    console.error('Erro ao editar cobranca:', error.response?.data || error.message);
+    logger.error('charge.edit.error', { chargeId: targetChargeId, error: error.message });
     throw new HttpsError('internal', 'Erro interno. Tente novamente mais tarde.');
   }
 });
 
 // ─── getPixQrCode ─────────────────────────────────────────────────────────────
-exports.getPixQrCode = onCall({ cors: true, invoker: 'public' }, async (request) => {
+exports.getPixQrCode = onCall({ cors: true, invoker: 'public', secrets: [ASAAS_PLATFORM_WALLET_ID] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Usuario nao autenticado.');
   }
@@ -878,7 +885,7 @@ exports.getPixQrCode = onCall({ cors: true, invoker: 'public' }, async (request)
     };
   } catch (error) {
     if (error instanceof HttpsError) throw error;
-    console.error(`Erro ao obter QR Code Pix para a cobranca ${chargeId}:`, error);
+    logger.error('charge.getPixQrCode.error', { chargeId, error: error.message });
     throw new HttpsError('internal', 'Erro interno. Tente novamente mais tarde.');
   }
 });

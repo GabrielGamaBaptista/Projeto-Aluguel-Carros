@@ -69,8 +69,9 @@ export default function ContractDetailsScreen({ route, navigation }: any) {
       let active = true;
       const loadPendingCharge = async () => {
         setLoadingCharge(true);
-        const charge = await paymentService.getPendingChargeByContract(contractId);
+        const chargeResult = await paymentService.getPendingChargeByContract(contractId);
         if (!active) return;
+        const charge = chargeResult.data || null;
         setPendingCharge(charge);
         if (charge) setChargeEditAmount(String(charge.amount || ''));
         setLoadingCharge(false);
