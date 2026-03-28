@@ -435,6 +435,7 @@ firebase deploy --only firestore:indexes
 | `charges` | landlordId ↑ + carId ↑ + dueDate ↓ | `getChargesByCar` (Q3.1) |
 | `rentalContracts` | carId ↑ + landlordId ↑ + active ↑ | `getContractByCar` locador (Q10.5) |
 | `rentalContracts` | carId ↑ + tenantId ↑ + active ↑ | `getContractByCar` locatario (Q10.5) |
+| `users` | role ↑ + email ↑ | `searchTenantsCF` busca por email (Q1.6) |
 
 **fieldOverrides (collection group `private` — Q1.2 Fase C):**
 | Campo | queryScope | Usado em |
