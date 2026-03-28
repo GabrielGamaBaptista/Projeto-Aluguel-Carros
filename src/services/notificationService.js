@@ -1,6 +1,7 @@
 // src/services/notificationService.js
 // Gerenciamento de push notifications com Firebase Cloud Messaging
 import { firestore } from '../config/firebase';
+import functions from '@react-native-firebase/functions';
 import { Platform } from 'react-native';
 import { showMessage } from 'react-native-flash-message';
 import { navigationRef } from './navigationService';
@@ -176,47 +177,46 @@ export const notificationService = {
     }
   },
 
-  // Salvar FCM token no Firestore
+  // Salvar FCM token no Firestore (SEC-04 Fase A: dual-write no doc publico + private/data)
   saveToken: async (userId, token) => {
     try {
-      await firestore().collection('users').doc(userId).update({
-        fcmToken: token,
-        fcmTokenUpdatedAt: firestore.FieldValue.serverTimestamp(),
-      });
+      const payload = { fcmToken: token, fcmTokenUpdatedAt: firestore.FieldValue.serverTimestamp() };
+      await Promise.all([
+        firestore().collection('users').doc(userId).update(payload),
+        firestore().collection('users').doc(userId).collection('private').doc('data').set(
+          payload, { merge: true }
+        ),
+      ]);
     } catch (error) {
       console.error('Erro ao salvar FCM token:', error);
     }
   },
 
-  // Remover token ao fazer logout
+  // Remover token ao fazer logout (SEC-04 Fase A: limpar em ambos os locais)
   removeToken: async (userId) => {
     _listenersRegistered = false;
     _currentUserId = null;
     _unsubscribers.forEach(fn => { try { fn?.(); } catch (_) {} });
     _unsubscribers = [];
     try {
-      await firestore().collection('users').doc(userId).update({
-        fcmToken: null,
-        fcmTokenUpdatedAt: firestore.FieldValue.serverTimestamp(),
-      });
+      const payload = { fcmToken: null, fcmTokenUpdatedAt: firestore.FieldValue.serverTimestamp() };
+      await Promise.all([
+        firestore().collection('users').doc(userId).update(payload),
+        firestore().collection('users').doc(userId).collection('private').doc('data').set(
+          payload, { merge: true }
+        ),
+      ]);
     } catch (error) {
       // Silencioso — pode falhar quando chamado apos signOut (auth ja revogado)
-      // O token e limpo antes do signOut em authService.logout()
     }
   },
 
-  // Criar notificacao no Firestore (Cloud Function envia o push)
+  // Criar notificacao via Cloud Function segura (SEC-01)
+  // Substitui write direto ao Firestore — valida relacionamento server-side
   createNotification: async (targetUserId, title, body, data = {}) => {
     try {
-      await firestore().collection('notifications').add({
-        userId: targetUserId,
-        title,
-        body,
-        data,
-        read: false,
-        sent: false,
-        createdAt: firestore.FieldValue.serverTimestamp(),
-      });
+      const createNotificationCF = functions().httpsCallable('createNotificationCF');
+      await createNotificationCF({ targetUserId, title, body, data });
     } catch (error) {
       console.error('Erro ao criar notificacao:', error);
     }

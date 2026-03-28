@@ -23,7 +23,7 @@ exports.assignTenant = onCall({ cors: true, invoker: 'public' }, async (request)
   const db = admin.firestore();
   const uid = request.auth.uid;
 
-  // Pre-check: tenant nao pode ter outro carro (query nao suportada dentro de transacao)
+  // Pre-check fora da transacao: fail-fast para UX (nao autoritativo)
   const existingCars = await db.collection('cars')
     .where('tenantId', '==', uid)
     .limit(1)
@@ -43,6 +43,19 @@ exports.assignTenant = onCall({ cors: true, invoker: 'public' }, async (request)
     transactionResult = await db.runTransaction(async (tx) => {
       const requestRef = db.collection('tenantRequests').doc(requestId);
       const requestDoc = await tx.get(requestRef);
+
+      // SEC-05: check autoritativo DENTRO da transacao para fechar race condition.
+      // O Admin SDK suporta tx.get(query) — diferente do client SDK.
+      const existingCarsSnap = await tx.get(
+        db.collection('cars').where('tenantId', '==', uid).limit(1)
+      );
+      if (!existingCarsSnap.empty) {
+        const car = existingCarsSnap.docs[0].data();
+        throw new HttpsError(
+          'failed-precondition',
+          `Voce ja esta atribuido ao carro ${car.brand} ${car.model} (${car.plate}). Cada locatario so pode ter um carro.`
+        );
+      }
 
       if (!requestDoc.exists) {
         throw new HttpsError('not-found', 'Solicitacao nao encontrada.');

@@ -78,22 +78,35 @@ const createSubaccount = async (data) => {
     return response.data;
   } catch (error) {
     const asaasErrors = error.response?.data?.errors || [];
-    const emailInUse = asaasErrors.some(e =>
-      e.description && e.description.includes('já está em uso')
+    // Usa 'em uso' sem acentos para evitar problemas de encoding entre fonte e resposta da API
+    const alreadyInUse = asaasErrors.some(e =>
+      e.description && e.description.toLowerCase().includes('em uso')
     );
 
-    if (emailInUse) {
-      // Conta já existe no Asaas — busca pelo CPF/CNPJ para recuperar apiKey
-      console.log('Email já em uso no Asaas. Buscando conta existente pelo CPF/CNPJ...');
-      const search = await getMainClient().get('/accounts', {
-        params: { cpfCnpj: data.cpfCnpj }
-      });
-      const existing = search.data?.data?.[0];
-      if (existing) {
-        console.log('Conta existente encontrada no Asaas, id:', existing.id);
-        return existing;
+    if (alreadyInUse) {
+      // Conta já existe no Asaas (CPF, CNPJ ou email) — busca pelo CPF/CNPJ para recuperar dados
+      console.log('Identificador ja em uso no Asaas. Buscando conta existente pelo CPF/CNPJ...');
+      try {
+        const search = await getMainClient().get('/accounts', {
+          params: { cpfCnpj: data.cpfCnpj }
+        });
+        const existing = search.data?.data?.[0];
+        if (existing) {
+          console.log('Conta existente encontrada no Asaas, id:', existing.id, '| buscando detalhes completos...');
+          // GET /accounts/{id} retorna apiKey; o resultado do listing nao inclui
+          const detail = await getMainClient().get(`/accounts/${existing.id}`);
+          const fullAccount = detail.data;
+          if (fullAccount && fullAccount.apiKey) {
+            console.log('apiKey recuperada com sucesso para conta existente, id:', existing.id);
+            return fullAccount;
+          }
+          console.warn('Conta encontrada mas apiKey ausente no detalhe. Retornando dados parciais.');
+          return existing;
+        }
+        console.error('Conta nao encontrada pelo CPF/CNPJ apos erro de identificador em uso.');
+      } catch (recoveryError) {
+        console.error('Erro ao recuperar conta existente no Asaas:', recoveryError?.response?.data || recoveryError.message);
       }
-      console.error('Conta não encontrada pelo CPF/CNPJ após erro de email em uso.');
     }
 
     const asaasDetail = error.response?.data ? JSON.stringify(error.response.data) : error.message;

@@ -74,10 +74,12 @@ export const carsService = {
     }
   },
 
-  getCarById: async (carId) => {
+  getCarById: async (carId, { forceRefresh = false } = {}) => {
     try {
-      const cached = carCache.get(carId);
-      if (cached) return { success: true, data: cached };
+      if (!forceRefresh) {
+        const cached = carCache.get(carId);
+        if (cached) return { success: true, data: cached };
+      }
 
       const doc = await withRetry(() => firestore().collection('cars').doc(carId).get());
       if (doc.exists) {

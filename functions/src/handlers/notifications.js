@@ -11,15 +11,18 @@ exports.sendPushNotification = onDocumentCreated(
     const data = event.data.data();
     const { userId, title, body } = data;
 
-    const userDoc = await admin.firestore().collection('users').doc(userId).get();
+    // SEC-04 Fase B: ler fcmToken de private/data primeiro; fallback para doc publico
+    const [userDoc, privateDoc] = await Promise.all([
+      admin.firestore().collection('users').doc(userId).get(),
+      admin.firestore().collection('users').doc(userId).collection('private').doc('data').get(),
+    ]);
     if (!userDoc.exists) {
       try { await event.data.ref.delete(); } catch (e) {}
       return null;
     }
-    const { fcmToken } = userDoc.data();
+    const fcmToken = (privateDoc.exists && privateDoc.data().fcmToken) || userDoc.data().fcmToken;
     if (!fcmToken) {
       console.warn(`sendPushNotification: usuario ${userId} sem fcmToken. Notificacao "${title}" nao enviada.`);
-      // Deletar notificacao sem token — nao sera entregue (Q5.5)
       try { await event.data.ref.delete(); } catch (e) {}
       return null;
     }
@@ -44,7 +47,11 @@ exports.sendPushNotification = onDocumentCreated(
         err.code === 'messaging/invalid-registration-token'
       ) {
         try {
-          await admin.firestore().collection('users').doc(userId).update({ fcmToken: null });
+          const nullPayload = { fcmToken: null };
+          await Promise.all([
+            admin.firestore().collection('users').doc(userId).update(nullPayload),
+            admin.firestore().collection('users').doc(userId).collection('private').doc('data').set(nullPayload, { merge: true }),
+          ]);
         } catch (cleanupErr) {
           console.error('Erro ao limpar fcmToken invalido:', cleanupErr.message);
         }

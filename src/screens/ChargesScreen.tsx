@@ -39,6 +39,33 @@ const ChargesScreen: React.FC<Props> = ({ route }) => {
   const [manualBillingType, setManualBillingType] = useState<'PIX' | 'BOLETO' | 'CREDIT_CARD'>('PIX');
   const [manualDescription, setManualDescription] = useState('');
   const [creatingCharge, setCreatingCharge] = useState(false);
+  const [hasSubaccount, setHasSubaccount] = useState(false);
+  const [subaccountCreating, setSubaccountCreating] = useState(false);
+
+  useEffect(() => {
+    const checkOnboarding = async () => {
+      try {
+        const onboardingStatus: any = await paymentService.checkOnboarding();
+        if (onboardingStatus?.exists) {
+          setHasSubaccount(true);
+        } else if (onboardingStatus?.creating) {
+          setSubaccountCreating(true);
+          Alert.alert(
+            'Conta em configuracao',
+            'Sua conta de recebimentos esta sendo configurada. Aguarde alguns instantes e tente novamente.'
+          );
+        } else {
+          Alert.alert(
+            'Atencao',
+            'Uma subconta no Asaas sera criada automaticamente para voce receber os pagamentos.'
+          );
+        }
+      } catch (error) {
+        console.error('Error checking onboarding:', error);
+      }
+    };
+    checkOnboarding();
+  }, [landlordId]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -117,6 +144,11 @@ const ChargesScreen: React.FC<Props> = ({ route }) => {
   const handleNewManualCharge = () => setModalVisible(true);
 
   const handleCreateManualCharge = async () => {
+    if (subaccountCreating) {
+      Alert.alert('Aguarde', 'Sua conta de recebimentos ainda esta sendo configurada. Tente novamente em instantes.');
+      return;
+    }
+
     const amount = parseFloat(manualAmount);
     if (isNaN(amount) || amount <= 0) {
       Alert.alert('Erro', 'Informe um valor valido.');
@@ -134,26 +166,39 @@ const ChargesScreen: React.FC<Props> = ({ route }) => {
     }
 
     setCreatingCharge(true);
-    const result: any = await paymentService.createCharge({
-      contractId: null,
-      carId,
-      tenantId,
-      landlordId,
-      amount,
-      billingType: manualBillingType,
-      dueDate: isoDate,
-      description: manualDescription || `Cobranca avulsa - ${carInfo}`,
-      carInfo,
-    });
-    setCreatingCharge(false);
-    if (result?.success) {
-      setModalVisible(false);
-      setManualAmount('');
-      setManualDescription('');
-      fetchData();
-      showMessage({ message: 'Cobranca avulsa criada!', type: 'success' });
-    } else {
-      Alert.alert('Erro', result?.error || 'Nao foi possivel criar a cobranca.');
+    try {
+      if (!hasSubaccount) {
+        const onboardingResult: any = await paymentService.createSubaccount();
+        if (onboardingResult && onboardingResult.success === false) {
+          throw new Error(onboardingResult.error || 'Falha ao criar subconta no Asaas.');
+        }
+        setHasSubaccount(true);
+      }
+
+      const result: any = await paymentService.createCharge({
+        contractId: null,
+        carId,
+        tenantId,
+        landlordId,
+        amount,
+        billingType: manualBillingType,
+        dueDate: isoDate,
+        description: manualDescription || `Cobranca avulsa - ${carInfo}`,
+        carInfo,
+      });
+      if (result?.success) {
+        setModalVisible(false);
+        setManualAmount('');
+        setManualDescription('');
+        fetchData();
+        showMessage({ message: 'Cobranca avulsa criada!', type: 'success' });
+      } else {
+        Alert.alert('Erro', result?.error || 'Nao foi possivel criar a cobranca.');
+      }
+    } catch (error: any) {
+      Alert.alert('Erro', error.message || 'Falha ao criar cobranca.');
+    } finally {
+      setCreatingCharge(false);
     }
   };
 

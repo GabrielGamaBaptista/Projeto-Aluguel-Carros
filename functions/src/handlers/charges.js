@@ -6,6 +6,7 @@ const { createOrGetCustomer } = require('../asaas/customers');
 const { createPayment, getPixQrCode: asaasGetPixQrCode } = require('../asaas/payments');
 const { createSubaccountClient, ASAAS_PLATFORM_WALLET_ID } = require('../asaas/client');
 const { checkRateLimit } = require('../utils/rateLimiter');
+const { validateEnum, validateStringLength } = require('../utils/validators');
 
 /**
  * Função interna para criação de cobrança no Asaas e no Firestore.
@@ -130,21 +131,30 @@ exports.createCharge = onCall({ cors: true, invoker: 'public', secrets: [ASAAS_P
     throw new HttpsError('permission-denied', 'Apenas o locador pode criar cobrancas.');
   }
 
-  // Fix 1: validar que o carro pertence ao locador autenticado E que o locatário está vinculado
-  if (data.carId) {
-    const carDoc = await admin.firestore().collection('cars').doc(data.carId).get();
-    if (!carDoc.exists) {
-      throw new HttpsError('not-found', 'Carro nao encontrado.');
-    }
-    const carData = carDoc.data();
-    // Verificar ownership do carro
-    if (carData.landlordId !== data.landlordId) {
-      throw new HttpsError('permission-denied', 'Este carro nao pertence ao locador informado.');
-    }
-    // Verificar vinculo do locatario (se fornecido)
-    if (data.tenantId && carData.tenantId !== data.tenantId) {
-      throw new HttpsError('failed-precondition', 'O locatario nao esta vinculado ao carro informado.');
-    }
+  // SEC-13: validar billingType e tamanho de description
+  if (data.billingType && !validateEnum(data.billingType, ['PIX', 'BOLETO'])) {
+    throw new HttpsError('invalid-argument', 'billingType deve ser PIX ou BOLETO.');
+  }
+  if (!validateStringLength(data.description, 500)) {
+    throw new HttpsError('invalid-argument', 'description excede 500 caracteres.');
+  }
+
+  // SEC-02: carId obrigatorio — sem ele toda validacao de ownership seria ignorada
+  if (!data.carId) {
+    throw new HttpsError('invalid-argument', 'carId e obrigatorio.');
+  }
+
+  // Validar que o carro pertence ao locador autenticado E que o locatario esta vinculado
+  const carDoc = await admin.firestore().collection('cars').doc(data.carId).get();
+  if (!carDoc.exists) {
+    throw new HttpsError('not-found', 'Carro nao encontrado.');
+  }
+  const carData = carDoc.data();
+  if (carData.landlordId !== data.landlordId) {
+    throw new HttpsError('permission-denied', 'Este carro nao pertence ao locador informado.');
+  }
+  if (data.tenantId && carData.tenantId !== data.tenantId) {
+    throw new HttpsError('failed-precondition', 'O locatario nao esta vinculado ao carro informado.');
   }
 
   try {
@@ -158,6 +168,21 @@ exports.createCharge = onCall({ cors: true, invoker: 'public', secrets: [ASAAS_P
       if (!existing.empty && existing.docs[0].data().status !== 'CANCELLED') {
         const existingDoc = existing.docs[0];
         return { success: true, chargeId: existingDoc.id, invoiceUrl: existingDoc.data().invoiceUrl || null, alreadyExists: true };
+      }
+    }
+
+    // SEC-06: validar contractId contra carId e landlordId para prevenir uso cruzado
+    if (data.contractId) {
+      const contractDoc = await admin.firestore().collection('rentalContracts').doc(data.contractId).get();
+      if (!contractDoc.exists) {
+        throw new HttpsError('not-found', 'Contrato nao encontrado.');
+      }
+      const contractData = contractDoc.data();
+      if (contractData.landlordId !== request.auth.uid) {
+        throw new HttpsError('permission-denied', 'Este contrato nao pertence ao locador autenticado.');
+      }
+      if (contractData.carId !== data.carId) {
+        throw new HttpsError('invalid-argument', 'O contrato informado nao corresponde ao carro informado.');
       }
     }
 
@@ -185,6 +210,15 @@ exports.createCharge = onCall({ cors: true, invoker: 'public', secrets: [ASAAS_P
     return result;
   } catch (error) {
     if (error instanceof HttpsError) throw error;
+    const asaasErrors = error.response?.data?.errors || [];
+    if (asaasErrors.length > 0) {
+      let description = asaasErrors.map(e => e.description).join(' | ');
+      if (description.toLowerCase().includes('aprovada') || description.toLowerCase().includes('aprovado')) {
+        description += ' Verifique seu email para finalizar o cadastro na Asaas.';
+      }
+      logger.error('charge.create.error', { error: error.message, asaasErrors });
+      throw new HttpsError('failed-precondition', description);
+    }
     logger.error('charge.create.error', { error: error.message });
     throw new HttpsError('internal', 'Erro interno. Tente novamente mais tarde.');
   }

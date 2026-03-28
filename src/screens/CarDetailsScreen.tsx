@@ -70,7 +70,7 @@ const CarDetailsScreen = ({ route, navigation }) => {
 
       // Buscar carro e tarefas em paralelo
       const [carResult, tasksResult, completedResult] = await Promise.all([
-        carsService.getCarById(carId),
+        carsService.getCarById(carId, { forceRefresh: true }),
         tasksService.getCarTasks(carId, 'pending', tenantFilterId),
         tasksService.getCarTasks(carId, 'completed', tenantFilterId),
       ]);

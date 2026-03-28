@@ -34,7 +34,7 @@ const EditCarScreen = ({ route, navigation }) => {
   useEffect(() => { loadCarData(); }, []);
 
   const loadCarData = async () => {
-    const result = await carsService.getCarById(carId);
+    const result = await carsService.getCarById(carId, { forceRefresh: true });
     if (result.success) {
       const car = result.data;
       setBrand(car.brand || '');

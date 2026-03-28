@@ -1,6 +1,7 @@
 node_modules/
 *.local
 .env
+.env.local
 test-sandbox.js
 check-charge.js
 simulate-payment.js

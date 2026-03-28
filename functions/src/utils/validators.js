@@ -37,8 +37,29 @@ const validateAmount = (value) => {
   return !isNaN(amount) && amount > 0;
 };
 
+/**
+ * Valida se um valor pertence a um conjunto permitido de opcoes.
+ * @param {*} value - Valor a validar.
+ * @param {Array} allowed - Lista de valores permitidos.
+ * @returns {boolean} True se valor estiver na lista.
+ */
+const validateEnum = (value, allowed) => allowed.includes(value);
+
+/**
+ * Valida se uma string nao ultrapassa o tamanho maximo.
+ * @param {string} str - String a validar.
+ * @param {number} maxLength - Comprimento maximo permitido.
+ * @returns {boolean} True se dentro do limite.
+ */
+const validateStringLength = (str, maxLength) => {
+  if (!str) return true; // campos opcionais sao validos quando ausentes
+  return String(str).length <= maxLength;
+};
+
 module.exports = {
   validateRequired,
   validateCpfCnpj,
   validateAmount,
+  validateEnum,
+  validateStringLength,
 };

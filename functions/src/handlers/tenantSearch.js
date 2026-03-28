@@ -69,6 +69,7 @@ exports.searchTenantsCF = onCall({ cors: true, invoker: 'public' }, async (reque
       email: doc.data().email || '',
     }));
   } catch (err) {
-    throw new HttpsError('internal', 'Erro ao buscar locatarios: ' + err.message);
+    console.error('searchTenantsCF error:', err.message);
+    throw new HttpsError('internal', 'Erro interno ao buscar locatarios. Tente novamente.');
   }
 });

@@ -69,3 +69,7 @@ exports.findEmailByIdentifierCF = piiQueries.findEmailByIdentifierCF;
 // Busca de locatarios restrita ao locador autenticado (Q1.6)
 const tenantSearch = require('./src/handlers/tenantSearch');
 exports.searchTenantsCF = tenantSearch.searchTenantsCF;
+
+// Criar notificacao via CF segura — SEC-01
+const createNotification = require('./src/handlers/createNotification');
+exports.createNotificationCF = createNotification.createNotificationCF;

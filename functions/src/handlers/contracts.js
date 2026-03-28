@@ -3,6 +3,7 @@ const admin = require('firebase-admin');
 const { generateBatchCharges, _createChargeInternal, calcNextDueDate } = require('./charges');
 const { createSubaccountClient, ASAAS_PLATFORM_WALLET_ID } = require('../asaas/client');
 const { checkRateLimit } = require('../utils/rateLimiter');
+const { validateEnum } = require('../utils/validators');
 
 /**
  * Cancela atomicamente um contrato ativo e todas as cobranças PENDING/OVERDUE.
@@ -186,6 +187,14 @@ exports.createContract = onCall({ cors: true, invoker: 'public', secrets: [ASAAS
 
   if (!carId || !tenantId || !rentAmount || !frequency || !startDate || !nextDueDate) {
     throw new HttpsError('invalid-argument', 'Campos obrigatorios ausentes.');
+  }
+
+  // SEC-14: validar enums de frequency e billingType
+  if (!validateEnum(frequency, ['MONTHLY', 'WEEKLY', 'BIWEEKLY'])) {
+    throw new HttpsError('invalid-argument', 'frequency deve ser MONTHLY, WEEKLY ou BIWEEKLY.');
+  }
+  if (billingType && !validateEnum(billingType, ['PIX', 'BOLETO'])) {
+    throw new HttpsError('invalid-argument', 'billingType deve ser PIX ou BOLETO.');
   }
 
   const db = admin.firestore();

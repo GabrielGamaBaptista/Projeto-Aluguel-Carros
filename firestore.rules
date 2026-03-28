@@ -243,13 +243,8 @@ service cloud.firestore {
       allow read: if request.auth != null
         && request.auth.uid == resource.data.userId;
 
-      allow create: if request.auth != null
-        && request.resource.data.keys().hasOnly(['userId', 'title', 'body', 'data', 'read', 'sent', 'createdAt'])
-        && request.resource.data.userId is string
-        && request.resource.data.userId != request.auth.uid
-        && request.resource.data.read == false
-        && request.resource.data.sent == false
-        && request.resource.data.createdAt == request.time;
+      // SEC-01: criacao bloqueada para clientes — apenas o admin SDK (createNotificationCF) pode criar.
+      allow create: if false;
 
       allow update: if request.auth != null
         && resource.data.userId == request.auth.uid

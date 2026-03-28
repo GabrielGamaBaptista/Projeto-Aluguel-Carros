@@ -6,6 +6,10 @@ ios/BapCar/GoogleService-Info.plist
 # Android signing — manter credenciais em ~/.gradle/gradle.properties (fora do repo)
 android/keystore.properties
 
+# Cloud Functions — variáveis de ambiente com secrets
+functions/.env
+functions/.env.local
+
 # Scripts utilitários com paths ou tokens locais
 iam.js
 rmdir
