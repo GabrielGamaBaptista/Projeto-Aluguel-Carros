@@ -134,7 +134,7 @@ exports.createAsaasSubaccount = onCall({ cors: true, invoker: 'public', secrets:
       try {
         const subaccountClient = createSubaccountClient(result.apiKey);
         await subaccountClient.post('/webhooks', {
-          name: 'AluguelCarrosApp Webhook',
+          name: 'BapCar Webhook',
           url: config.webhook_url,
           email: userData.email,
           enabled: true,

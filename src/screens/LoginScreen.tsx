@@ -59,7 +59,7 @@ const LoginScreen = ({ navigation }) => {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
           <MdiCar size={64} color="#4F46E5" />
-          <Text style={styles.title}>Aluguel de Carros</Text>
+          <Text style={styles.title}>BapCar</Text>
           <Text style={styles.subtitle}>Faca login para continuar</Text>
         </View>
 

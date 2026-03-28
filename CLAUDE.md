@@ -1,4 +1,4 @@
-# CLAUDE.md — Contexto do Projeto AluguelCarrosApp
+# CLAUDE.md — Contexto do Projeto BapCar
 
 ## VISÃO GERAL
 

@@ -23,7 +23,7 @@ const config = new Proxy({}, {
   get: (_, key) => {
     switch (key) {
       case 'api_key':            return process.env.ASAAS_API_KEY || '';
-      case 'base_url':           return process.env.ASAAS_BASE_URL || 'https://sandbox.asaas.com/api/v3';
+      case 'base_url':           return process.env.ASAAS_BASE_URL || 'https://api.asaas.com/v3';
       case 'platform_wallet_id': return process.env.ASAAS_PLATFORM_WALLET_ID || '';
       case 'platform_fee_percent': return parseFloat(process.env.ASAAS_PLATFORM_FEE_PERCENT || '10');
       case 'webhook_token':      return process.env.ASAAS_WEBHOOK_TOKEN || '';
@@ -73,7 +73,7 @@ let _mainClient = null;
 const getMainClient = () => {
   if (!_mainClient) {
     _mainClient = addRetryInterceptor(axios.create({
-      baseURL: config.base_url || 'https://sandbox.asaas.com/api/v3',
+      baseURL: config.base_url || 'https://api.asaas.com/v3',
       timeout: 30000,
       headers: { 'Content-Type': 'application/json' },
     }));
@@ -93,7 +93,7 @@ const getMainClient = () => {
  * @returns {import('axios').AxiosInstance} Instancia do Axios para a subconta.
  */
 const createSubaccountClient = (apiKey) => addRetryInterceptor(axios.create({
-  baseURL: config.base_url || 'https://sandbox.asaas.com/api/v3',
+  baseURL: config.base_url || 'https://api.asaas.com/v3',
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',

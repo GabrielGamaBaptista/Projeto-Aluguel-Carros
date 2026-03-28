@@ -1,5 +1,5 @@
 # ============================================
-# ProGuard Rules - AluguelCarrosApp
+# ProGuard Rules - BapCar
 # React Native + Firebase + Libs
 # ============================================
 

@@ -13,7 +13,7 @@ workflows:
       - name: Decode GoogleService-Info.plist
         script: |
           echo "$GOOGLE_SERVICE_INFO_PLIST_BASE64" | base64 --decode \
-            > ios/AluguelCarrosApp/GoogleService-Info.plist
+            > ios/BapCar/GoogleService-Info.plist
 
       - name: Install Node dependencies
         script: |
@@ -26,8 +26,8 @@ workflows:
       - name: Build unsigned iOS app
         script: |
           xcodebuild \
-            -workspace ios/AluguelCarrosApp.xcworkspace \
-            -scheme AluguelCarrosApp \
+            -workspace ios/BapCar.xcworkspace \
+            -scheme BapCar \
             -sdk iphoneos \
             -configuration Release \
             -derivedDataPath build \
@@ -39,14 +39,14 @@ workflows:
 
       - name: Package IPA
         script: |
-          APP_PATH="build/Build/Products/Release-iphoneos/AluguelCarrosApp.app"
+          APP_PATH="build/Build/Products/Release-iphoneos/BapCar.app"
           mkdir -p Payload
           cp -r "$APP_PATH" Payload/
-          zip -r AluguelCarrosApp-unsigned.ipa Payload
+          zip -r BapCar-unsigned.ipa Payload
           rm -rf Payload
 
     artifacts:
-      - AluguelCarrosApp-unsigned.ipa
+      - BapCar-unsigned.ipa
 
     triggering:
       events:
