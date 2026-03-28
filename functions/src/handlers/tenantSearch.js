@@ -35,36 +35,40 @@ exports.searchTenantsCF = onCall({ cors: true, invoker: 'public' }, async (reque
   // Evita tratar emails com 11 digitos (ex: pedro12345678901@gmail.com) como CPF
   const isCpfSearch = /^[\d.\-\s]+$/.test(q) && cleanQ.length === 11;
 
-  if (isCpfSearch) {
-    // Busca por CPF na subcollection private (admin SDK)
-    const snap = await db.collectionGroup('private').where('cpf', '==', cleanQ).limit(5).get();
-    if (snap.empty) return [];
+  try {
+    if (isCpfSearch) {
+      // Busca por CPF na subcollection private (admin SDK)
+      const snap = await db.collectionGroup('private').where('cpf', '==', cleanQ).limit(5).get();
+      if (snap.empty) return [];
 
-    // Buscar docs publicos em paralelo (performance)
-    const results = (await Promise.all(
-      snap.docs.map(async (privateDoc) => {
-        const userRef = privateDoc.ref.parent.parent;
-        const userDoc = await userRef.get();
-        if (userDoc.exists && userDoc.data().role === 'locatario') {
-          return { id: userDoc.id, name: userDoc.data().name || '', email: userDoc.data().email || '' };
-        }
-        return null;
-      })
-    )).filter(res => res !== null);
-    return results;
+      // Buscar docs publicos em paralelo (performance)
+      const results = (await Promise.all(
+        snap.docs.map(async (privateDoc) => {
+          const userRef = privateDoc.ref.parent.parent;
+          const userDoc = await userRef.get();
+          if (userDoc.exists && userDoc.data().role === 'locatario') {
+            return { id: userDoc.id, name: userDoc.data().name || '', email: userDoc.data().email || '' };
+          }
+          return null;
+        })
+      )).filter(res => res !== null);
+      return results;
+    }
+
+    // Busca por email (prefixo)
+    const snap = await db.collection('users')
+      .where('role', '==', 'locatario')
+      .where('email', '>=', q)
+      .where('email', '<=', q + '\uf8ff')
+      .limit(10)
+      .get();
+
+    return snap.docs.map(doc => ({
+      id: doc.id,
+      name: doc.data().name || '',
+      email: doc.data().email || '',
+    }));
+  } catch (err) {
+    throw new HttpsError('internal', 'Erro ao buscar locatarios: ' + err.message);
   }
-
-  // Busca por email (prefixo)
-  const snap = await db.collection('users')
-    .where('role', '==', 'locatario')
-    .where('email', '>=', q)
-    .where('email', '<=', q + '\uf8ff')
-    .limit(10)
-    .get();
-
-  return snap.docs.map(doc => ({
-    id: doc.id,
-    name: doc.data().name || '',
-    email: doc.data().email || '',
-  }));
 });
