@@ -143,6 +143,22 @@ export const carsService = {
         rentedAt: null,
       });
       carCache.invalidate(carId);
+
+      // Limpar vinculo de acesso landlord-tenant (SEC-09)
+      // Nao-critico: falha nao impede a remocao do locatario.
+      // permission-denied e esperado para locatarios sem currentLandlordId (pre-deploy) — silenciado.
+      if (tenantId) {
+        try {
+          await firestore().collection('users').doc(tenantId).update({
+            currentLandlordId: null,
+          });
+        } catch (e) {
+          if (e.code !== 'permission-denied') {
+            console.warn('[removeTenant] Falha ao limpar currentLandlordId:', e.message);
+          }
+        }
+      }
+
       await tasksService.deleteTasksByCar(carId);
 
       // Notificar locatario que foi removido do carro

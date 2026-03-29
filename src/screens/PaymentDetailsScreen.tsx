@@ -91,17 +91,32 @@ export default function PaymentDetailsScreen() {
     const unsubscribe = firestore()
       .collection('charges')
       .doc(chargeId)
-      .onSnapshot(snapshot => {
-        if (snapshot.exists) {
-          setCharge({ id: snapshot.id, ...snapshot.data() });
-        } else {
-          Alert.alert(
-            'Cobranca nao encontrada',
-            'Esta cobranca foi removida ou cancelada. Voce sera redirecionado.',
-            [{ text: 'OK', onPress: () => navigation.goBack() }],
-          );
+      .onSnapshot(
+        snapshot => {
+          if (snapshot.exists) {
+            setCharge({ id: snapshot.id, ...snapshot.data() });
+          } else {
+            Alert.alert(
+              'Cobranca nao encontrada',
+              'Esta cobranca foi removida ou cancelada. Voce sera redirecionado.',
+              [{ text: 'OK', onPress: () => navigation.goBack() }],
+            );
+          }
+        },
+        error => {
+          console.error('Charge snapshot error:', error);
+          if (error.code === 'permission-denied' || error.code === 'not-found') {
+            Alert.alert(
+              'Acesso negado',
+              'Voce nao tem permissao para visualizar esta cobranca.',
+              [{ text: 'OK', onPress: () => navigation.navigate('MainTabs', { screen: 'Home' }) }]
+            );
+          } else {
+            Alert.alert('Erro de conexao', 'Nao foi possivel carregar os dados. Tente novamente.',
+              [{ text: 'OK', onPress: () => navigation.goBack() }]);
+          }
         }
-      });
+      );
 
     return () => unsubscribe();
   }, [chargeId]);

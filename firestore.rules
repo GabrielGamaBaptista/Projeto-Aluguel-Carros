@@ -19,17 +19,40 @@ service cloud.firestore {
     // Escrita: apenas o proprio usuario, com protecao de campos criticos:
     //   - 'role' nao pode ser alterado (previne escalada de privilegio)
     //   - 'email', 'authProvider', 'createdAt' tambem sao imutaveis
+    //   - 'currentLandlordId' gerenciado exclusivamente via Cloud Functions (SEC-09)
+    //
+    // currentLandlordId: campo denormalizado setado por assignTenantCF quando locatario
+    //   e vinculado, e limpo por removeTenant/deleteCarCF quando desvinculado.
+    //   Usado para restringir leituras cross-user (SEC-09 Phase 2 — pendente migracao de dados).
+    //
+    // SEC-09 Phase 2 (TODO apos migracao): restringir leitura a:
+    //   request.auth.uid == userId
+    //   || (resource.data.get('currentLandlordId', null) != null
+    //       && resource.data.currentLandlordId == request.auth.uid)
     match /users/{userId} {
       allow read: if request.auth != null;
 
+      // currentLandlordId nao pode ser definido pelo cliente no momento do registro
       allow create: if request.auth != null
-        && request.auth.uid == userId;
+        && request.auth.uid == userId
+        && !request.resource.data.keys().hasAny(['currentLandlordId']);
 
+      // Atualizacao pelo proprio usuario — campos criticos imutaveis incluindo currentLandlordId.
+      // currentLandlordId so pode ser alterado via Cloud Functions (admin SDK bypassa regras).
       allow update: if request.auth != null
         && request.auth.uid == userId
         && !request.resource.data.diff(resource.data)
               .affectedKeys()
-              .hasAny(['role', 'email', 'authProvider', 'createdAt']);
+              .hasAny(['role', 'email', 'authProvider', 'createdAt', 'currentLandlordId']);
+
+      // Locador vinculado pode limpar currentLandlordId ao desatribuir o locatario (SEC-09).
+      // Apenas o campo currentLandlordId pode ser alterado e somente para null.
+      allow update: if request.auth != null
+        && request.auth.uid != userId
+        && resource.data.get('currentLandlordId', null) != null
+        && resource.data.currentLandlordId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['currentLandlordId'])
+        && request.resource.data.get('currentLandlordId', null) == null;
 
       allow delete: if false;
 

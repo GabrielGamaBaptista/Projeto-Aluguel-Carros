@@ -150,5 +150,16 @@ exports.assignTenant = onCall({ cors: true, invoker: 'public' }, async (request)
     console.error('Erro ao criar notificacao de aceite:', notifErr.message);
   }
 
+  // Post-transacao: marcar vinculo landlord-tenant para controle de acesso (SEC-09)
+  // Permite que o locador leia o documento publico do locatario (nome/foto).
+  // Nao-critico: falha nao impede o vinculo, apenas reduz visibilidade no app.
+  try {
+    await db.collection('users').doc(uid).update({
+      currentLandlordId: transactionResult.landlordId,
+    });
+  } catch (linkErr) {
+    console.warn('[assignTenant] Nao foi possivel marcar currentLandlordId:', linkErr.message);
+  }
+
   return { success: true };
 });

@@ -55,11 +55,26 @@ export default function ContractDetailsScreen({ route, navigation }: any) {
 
   // Bug 3: listener em tempo real para o contrato
   useEffect(() => {
-    const unsub = firestore().collection('rentalContracts').doc(contractId).onSnapshot(snap => {
-      if (snap.exists) {
-        setContract({ id: snap.id, ...snap.data() });
+    const unsub = firestore().collection('rentalContracts').doc(contractId).onSnapshot(
+      snap => {
+        if (snap.exists) {
+          setContract({ id: snap.id, ...snap.data() });
+        }
+      },
+      error => {
+        console.error('Contract snapshot error:', error);
+        if (error.code === 'permission-denied' || error.code === 'not-found') {
+          Alert.alert(
+            'Acesso negado',
+            'Voce nao tem permissao para visualizar este contrato.',
+            [{ text: 'OK', onPress: () => navigation.navigate('MainTabs', { screen: 'Home' }) }]
+          );
+        } else {
+          Alert.alert('Erro de conexao', 'Nao foi possivel carregar os dados. Tente novamente.',
+            [{ text: 'OK', onPress: () => navigation.goBack() }]);
+        }
       }
-    });
+    );
     return () => unsub();
   }, [contractId]);
 

@@ -143,6 +143,15 @@ exports.deleteCarCF = onCall({ cors: true, invoker: 'public' }, async (request) 
     } catch (notifErr) {
       console.warn('[deleteCarCF] Erro ao notificar locatario:', notifErr.message);
     }
+
+    // Limpar currentLandlordId do locatario pois o vinculo foi encerrado (SEC-09)
+    try {
+      await db.collection('users').doc(tenantId).update({
+        currentLandlordId: null,
+      });
+    } catch (linkErr) {
+      console.warn('[deleteCarCF] Nao foi possivel limpar currentLandlordId:', linkErr.message);
+    }
   }
 
   // 4. Deletar TODAS as tasks do carro (pending + completed)

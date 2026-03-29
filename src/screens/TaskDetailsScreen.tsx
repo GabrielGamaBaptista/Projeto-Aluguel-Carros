@@ -51,6 +51,7 @@ const TaskDetailsScreen = ({ route, navigation }) => {
 
   const loadTaskData = async () => {
     setLoadingData(true);
+    let redirecting = false;
     try {
       const currentUser = authService.getCurrentUser();
       if (currentUser) {
@@ -66,10 +67,19 @@ const TaskDetailsScreen = ({ route, navigation }) => {
             const carResult = await carsService.getCarById(resolvedCarId);
             if (carResult.success) setCar(carResult.data);
           }
+        } else {
+          // Tarefa nao encontrada ou sem permissao (ex: deep link para tarefa de outro usuario)
+          redirecting = true;
+          Alert.alert(
+            'Tarefa indisponivel',
+            'Esta tarefa nao esta acessivel.',
+            [{ text: 'OK', onPress: () => navigation.navigate('MainTabs', { screen: 'Home' }) }]
+          );
+          return;
         }
       }
     } catch (error) { console.error('Load task data error:', error); }
-    setLoadingData(false);
+    finally { if (!redirecting) setLoadingData(false); }
   };
 
   const isCompleted = task?.status === 'completed';

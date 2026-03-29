@@ -7,27 +7,8 @@ import { userCache } from '../utils/cache';
 const fn = () => functions();
 
 export const usersService = {
-  // Obter todos os locatários disponíveis
-  getAvailableTenants: async () => {
-    try {
-      const snapshot = await withRetry(() => firestore()
-        .collection('users')
-        .where('role', '==', 'locatario')
-        .get());
-      
-      const tenants = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-      
-      return { success: true, data: tenants };
-    } catch (error) {
-      console.error('Get tenants error:', error);
-      return { success: false, error: error.message };
-    }
-  },
-
   // Obter usuário por ID (com cache de 5min em memória — Q3.6)
+  // Nota SEC-09: leitura cross-user permitida apenas para landlord->tenant vinculado via currentLandlordId
   getUserById: async (userId) => {
     try {
       const cached = userCache.get(userId);

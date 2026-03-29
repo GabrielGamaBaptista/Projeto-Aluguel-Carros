@@ -51,6 +51,7 @@ const CarDetailsScreen = ({ route, navigation }) => {
   const loadCarDetails = async (isRefresh = false) => {
     // Durante pull-to-refresh, nao chama setLoading para nao desmontar o ScrollView
     if (!isRefresh) setLoading(true);
+    let redirecting = false;
     try {
       const currentUser = authService.getCurrentUser();
       let profile = userProfile;
@@ -83,6 +84,15 @@ const CarDetailsScreen = ({ route, navigation }) => {
         } else {
           setTenantInfo(null);
         }
+      } else if (!isRefresh) {
+        // Carro nao encontrado ou sem permissao (ex: deep link para carro de outro usuario)
+        redirecting = true;
+        Alert.alert(
+          'Veiculo indisponivel',
+          'Este veiculo nao esta acessivel.',
+          [{ text: 'OK', onPress: () => navigation.navigate('MainTabs', { screen: 'Home' }) }]
+        );
+        return;
       }
       if (tasksResult.success) setTasks(tasksResult.data);
       if (completedResult.success) setCompletedTasks(completedResult.data);
@@ -90,8 +100,11 @@ const CarDetailsScreen = ({ route, navigation }) => {
     } catch (error) {
       console.error('loadCarDetails error:', error);
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      // Nao limpa loading se estivermos redirecionando — evita flash de tela vazia antes do Alert
+      if (!redirecting) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   };
 
