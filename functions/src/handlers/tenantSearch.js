@@ -1,4 +1,5 @@
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const { logger } = require('firebase-functions');
 const admin = require('firebase-admin');
 const { checkRateLimit } = require('../utils/rateLimiter');
 
@@ -52,6 +53,14 @@ exports.searchTenantsCF = onCall({ cors: true, invoker: 'public' }, async (reque
           return null;
         })
       )).filter(res => res !== null);
+      // SEC-19: audit log de busca por CPF
+      logger.info('pii.access', {
+        type: 'searchTenants',
+        callerId: request.auth.uid,
+        queryType: 'cpf',
+        resultCount: results.length,
+        timestamp: new Date().toISOString(),
+      });
       return results;
     }
 
@@ -63,11 +72,21 @@ exports.searchTenantsCF = onCall({ cors: true, invoker: 'public' }, async (reque
       .limit(10)
       .get();
 
-    return snap.docs.map(doc => ({
+    const emailResults = snap.docs.map(doc => ({
       id: doc.id,
       name: doc.data().name || '',
       email: doc.data().email || '',
     }));
+
+    // SEC-19: audit log de busca por email
+    logger.info('pii.access', {
+      type: 'searchTenants',
+      callerId: request.auth.uid,
+      queryType: 'email',
+      resultCount: emailResults.length,
+      timestamp: new Date().toISOString(),
+    });
+    return emailResults;
   } catch (err) {
     console.error('searchTenantsCF error:', err.message);
     throw new HttpsError('internal', 'Erro interno ao buscar locatarios. Tente novamente.');

@@ -107,8 +107,20 @@ export const validatePassword = (password) => {
   const errors = [];
   if (password.length < 6) errors.push('Minimo 6 caracteres');
   if (password.length > 128) errors.push('Maximo 128 caracteres');
-  // Senhas comuns
-  const common = ['123456', '654321', 'password', 'senha', 'abcdef', '111111', '000000', 'qwerty'];
+  // Senhas comuns (brasileiras + universais)
+  const common = [
+    // Universais
+    '123456', '654321', 'password', 'abcdef', '111111', '000000', 'qwerty',
+    '123456789', '12345678', '12345', '1234567', '1234567890', '123123', '1234',
+    'iloveyou', 'letmein', 'monkey', 'dragon', 'master', 'login', 'welcome',
+    'passw0rd', 'pass123', '11111111', '22222222', 'aaaaaa', 'bbbbbb',
+    '123321', '654123', '777777', '123abc', 'abc@123', 'hello123',
+    // Brasileiras
+    'senha', 'senha123', 'mudar123', 'mudar@123', 'abc123', 'admin', 'admin123',
+    'teste', 'teste123', 'brasil', 'brasil123', 'futebol', 'flamengo',
+    'senha@123', 'brasil@123', 'android', 'corinthians', 'palmeiras',
+    'saopaulo', 'vasco', 'botafogo', 'cruzeiro', 'atletico',
+  ];
   if (common.includes(password.toLowerCase())) errors.push('Senha muito comum');
   return { valid: errors.length === 0, errors };
 };

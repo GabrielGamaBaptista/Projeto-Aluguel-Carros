@@ -157,7 +157,8 @@ exports.asaasWebhook = onRequest({ invoker: 'public', cors: false, secrets: [ASA
           break;
         default:
           logger.info('webhook.unknownEvent', { event, chargeId });
-          break;
+          // SEC-15: evento desconhecido — nao atualizar Firestore nem registrar em processedEvents
+          return null;
       }
 
       // Capturar payload para notificacoes — somente para eventos que geram notificacao

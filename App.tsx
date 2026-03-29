@@ -1,6 +1,6 @@
 // App.tsx
 import React, { useState, useEffect, useRef } from 'react';
-import { ActivityIndicator, View, StyleSheet, Text, StatusBar } from 'react-native';
+import { ActivityIndicator, AppState, View, StyleSheet, Text, StatusBar } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -78,6 +78,8 @@ function MainTabs({ userRole }) {
 export default function App() {
   const [user, setUser] = useState(null);
   const userUidRef = useRef(null); // ref para uso no handler de logout (evita stale closure)
+  const appStateRef = useRef(AppState.currentState);
+  const backgroundTimerRef = useRef(null);
   const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [emailVerified, setEmailVerified] = useState(false);
@@ -109,6 +111,33 @@ export default function App() {
       setEmailVerified(true);
     }
   };
+
+  // SEC-17: logout automatico apos 30min em background
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState) => {
+      const prev = appStateRef.current;
+      appStateRef.current = nextState;
+
+      if (prev === 'active' && nextState.match(/inactive|background/)) {
+        // App foi para background — iniciar contagem regressiva
+        backgroundTimerRef.current = setTimeout(() => {
+          if (userUidRef.current) {
+            authService.signOut().catch(() => {});
+          }
+        }, 30 * 60 * 1000); // 30 minutos
+      } else if (nextState === 'active' && prev !== 'active') {
+        // App voltou ao foreground — cancelar timer
+        if (backgroundTimerRef.current) {
+          clearTimeout(backgroundTimerRef.current);
+          backgroundTimerRef.current = null;
+        }
+      }
+    });
+    return () => {
+      sub.remove();
+      if (backgroundTimerRef.current) clearTimeout(backgroundTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     const unsub = authService.onAuthStateChanged(async (u) => {

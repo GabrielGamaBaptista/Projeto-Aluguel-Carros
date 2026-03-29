@@ -1,57 +1,24 @@
 // src/services/muralService.js
 import { firestore } from '../config/firebase';
+import functions from '@react-native-firebase/functions';
 import { notificationService } from './notificationService';
 
 export const muralService = {
   createPost: async (landlordId, data) => {
+    // SEC-03/08: criacao via CF segura que valida relacionamento server-side
+    // e popula tenantIds para controle granular de visibilidade.
     try {
-      const docRef = await firestore().collection('mural_posts').add({
-        landlordId,
-        title: data.title || '',
+      const createMuralPostCF = functions().httpsCallable('createMuralPostCF');
+      const result = await createMuralPostCF({
+        title: data.title,
         content: data.content,
-        category: data.category || 'geral',
-        targetType: data.targetType || 'all',
-        targetTenantId: data.targetTenantId || null,
-        targetCarId: data.targetCarId || null,
-        pinned: data.pinned || false,
-        createdAt: firestore.FieldValue.serverTimestamp(),
-        updatedAt: firestore.FieldValue.serverTimestamp(),
+        category: data.category,
+        targetType: data.targetType,
+        targetTenantId: data.targetTenantId,
+        targetCarId: data.targetCarId,
+        pinned: data.pinned,
       });
-      // Notificar locatarios
-      const notifTitle = data.title || 'Novo aviso no mural';
-      const notifBody = (data.content || '').substring(0, 100);
-      const notifData = { type: 'mural_post', postId: docRef.id };
-
-      if (data.targetType === 'specific' && data.targetTenantId) {
-        // Notificar apenas o locatario especifico
-        try {
-          await notificationService.createNotification(
-            data.targetTenantId, notifTitle, notifBody, notifData
-          );
-        } catch (e) { console.error('Notif mural tenant error:', e); }
-      } else if (data.targetType === 'all') {
-        // Notificar todos os locatarios atribuidos pelo locador
-        try {
-          const carsSnap = await firestore()
-            .collection('cars')
-            .where('landlordId', '==', landlordId)
-            .get();
-          const tenantIds = [
-            ...new Set(
-              carsSnap.docs
-                .map(d => d.data().tenantId)
-                .filter(Boolean)
-            ),
-          ];
-          await Promise.all(
-            tenantIds.map(tid =>
-              notificationService.createNotification(tid, notifTitle, notifBody, notifData)
-            )
-          );
-        } catch (e) { console.error('Notif mural all tenants error:', e); }
-      }
-
-      return { success: true, id: docRef.id };
+      return { success: true, id: result.data.id };
     } catch (error) {
       console.error('Create mural post error:', error);
       return { success: false, error: error.message };

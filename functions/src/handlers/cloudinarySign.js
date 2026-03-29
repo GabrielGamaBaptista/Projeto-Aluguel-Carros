@@ -9,15 +9,17 @@ exports.getCloudinarySignature = onCall({ cors: true, invoker: 'public', secrets
 
   const apiSecret = process.env.CLOUDINARY_API_SECRET;
   const apiKey = process.env.CLOUDINARY_API_KEY;
-  const cloudName = process.env.CLOUDINARY_CLOUD_NAME || 'dzjqdjdcz';
+  // SEC-21: sem fallback hardcoded — variavel obrigatoria
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
 
-  if (!apiSecret || !apiKey) {
-    console.error('CLOUDINARY_API_SECRET ou CLOUDINARY_API_KEY nao configurados.');
+  if (!apiSecret || !apiKey || !cloudName) {
+    console.error('CLOUDINARY_API_SECRET, CLOUDINARY_API_KEY ou CLOUDINARY_CLOUD_NAME nao configurados.');
     throw new HttpsError('internal', 'Configuracao de upload indisponivel.');
   }
 
   const timestamp = Math.round(new Date().getTime() / 1000);
-  const folder = 'aluguel-carros';
+  // SEC-12: pasta isolada por usuario — impede acesso cross-user a uploads nao processados
+  const folder = 'aluguel-carros/' + request.auth.uid;
   const paramsToSign = 'folder=' + folder + '&timestamp=' + timestamp;
   const signature = crypto
     .createHash('sha256')

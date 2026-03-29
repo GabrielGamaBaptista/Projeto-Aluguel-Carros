@@ -1,4 +1,5 @@
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const { logger } = require('firebase-functions');
 const admin = require('firebase-admin');
 const { checkRateLimit } = require('../utils/rateLimiter');
 
@@ -54,6 +55,14 @@ exports.getTenantDetailsCF = onCall({ cors: true, invoker: 'public' }, async (re
       'Acesso negado: voce nao e o locador de um carro atribuido a este locatario.'
     );
   }
+
+  // SEC-19: audit log de acesso a PII do locatario
+  logger.info('pii.access', {
+    type: 'getTenantDetails',
+    callerId,
+    tenantId,
+    timestamp: new Date().toISOString(),
+  });
 
   // Buscar dados completos do locatario (publico + private)
   const tenantData = await getUserMerged(db, tenantId);

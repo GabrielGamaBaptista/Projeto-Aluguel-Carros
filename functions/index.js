@@ -73,3 +73,7 @@ exports.searchTenantsCF = tenantSearch.searchTenantsCF;
 // Criar notificacao via CF segura — SEC-01
 const createNotification = require('./src/handlers/createNotification');
 exports.createNotificationCF = createNotification.createNotificationCF;
+
+// Mural — criacao via CF com validacao server-side de relacionamento (SEC-03/SEC-08)
+const muralHandler = require('./src/handlers/muralHandler');
+exports.createMuralPostCF = muralHandler.createMuralPostCF;

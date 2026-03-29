@@ -1,4 +1,5 @@
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const { logger } = require('firebase-functions');
 const admin = require('firebase-admin');
 const { checkRateLimit } = require('../utils/rateLimiter');
 
@@ -40,8 +41,10 @@ function isValidCnpj(cnpj) {
  * Output: { cpfExists?, cnpjExists?, phoneExists? }
  */
 exports.checkPiiUniqueCF = onCall({ cors: true, invoker: 'public' }, async (request) => {
-  const ip = request.rawRequest?.headers?.['x-forwarded-for']?.split(',')[0]?.trim()
-    || request.rawRequest?.ip
+  // SEC-10: rawRequest.ip e setado pelo Cloud Run com o IP real do cliente (nao spoofavel).
+  // x-forwarded-for e usado apenas como fallback pois pode ser manipulado.
+  const ip = request.rawRequest?.ip
+    || request.rawRequest?.headers?.['x-forwarded-for']?.split(',')[0]?.trim()
     || 'unknown';
   await checkRateLimit(`ip_${ip}`, 'checkPiiUnique', 10, 60000);
 
@@ -91,8 +94,8 @@ exports.checkPiiUniqueCF = onCall({ cors: true, invoker: 'public' }, async (requ
  * Output: { success: true, email } ou lanca HttpsError 'not-found'
  */
 exports.findEmailByIdentifierCF = onCall({ cors: true, invoker: 'public' }, async (request) => {
-  const ip = request.rawRequest?.headers?.['x-forwarded-for']?.split(',')[0]?.trim()
-    || request.rawRequest?.ip
+  const ip = request.rawRequest?.ip
+    || request.rawRequest?.headers?.['x-forwarded-for']?.split(',')[0]?.trim()
     || 'unknown';
   await checkRateLimit(`ip_${ip}`, 'findEmailByIdentifier', 10, 60000);
 
@@ -131,6 +134,14 @@ exports.findEmailByIdentifierCF = onCall({ cors: true, invoker: 'public' }, asyn
   if (!userDoc.exists) {
     throw new HttpsError('not-found', 'Usuario nao encontrado.');
   }
+
+  // SEC-19: audit log de acesso a PII (email por CPF/CNPJ)
+  logger.info('pii.access', {
+    type: 'findEmailByIdentifier',
+    identifierType: field,
+    ip,
+    timestamp: new Date().toISOString(),
+  });
 
   return { success: true, email: userDoc.data().email };
 });

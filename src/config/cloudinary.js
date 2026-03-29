@@ -1,8 +1,6 @@
 // src/config/cloudinary.js
 import functions from '@react-native-firebase/functions';
 
-const CLOUD_NAME_FALLBACK = 'dzjqdjdcz';
-
 const getSignatureFromBackend = async () => {
   try {
     const getCloudinarySignature = functions().httpsCallable('getCloudinarySignature');
@@ -15,10 +13,22 @@ const getSignatureFromBackend = async () => {
 };
 
 // Upload de IMAGENS (jpg, png)
-export const uploadImageToCloudinary = async (imageUri) => {
+// options.fileSizeBytes: tamanho do arquivo em bytes (opcional — validacao SEC-11)
+export const uploadImageToCloudinary = async (imageUri, options = {}) => {
+  // SEC-11: validacao de tamanho antes do upload (10MB para imagens)
+  const { fileSizeBytes = null } = options;
+  if (fileSizeBytes !== null && fileSizeBytes > 10 * 1024 * 1024) {
+    return { success: false, error: 'Imagem muito grande. Maximo 10MB.' };
+  }
+
   try {
     const { signature, timestamp, apiKey, cloudName, folder } = await getSignatureFromBackend();
-    
+
+    // SEC-21: cloudName vem exclusivamente do backend — sem fallback hardcoded
+    if (!cloudName) {
+      return { success: false, error: 'Configuracao de upload indisponivel.' };
+    }
+
     const formData = new FormData();
     formData.append('file', {
       uri: imageUri,
@@ -30,9 +40,8 @@ export const uploadImageToCloudinary = async (imageUri) => {
     formData.append('signature', signature);
     formData.append('folder', folder);
 
-    const activeCloudName = cloudName || CLOUD_NAME_FALLBACK;
     const response = await fetch(
-      `https://api.cloudinary.com/v1_1/${activeCloudName}/image/upload`,
+      `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
       { method: 'POST', body: formData }
     );
 
@@ -48,9 +57,20 @@ export const uploadImageToCloudinary = async (imageUri) => {
 };
 
 // Upload de PDFs como IMAGE (nao raw!)
-export const uploadFileToCloudinary = async (fileUri, fileName, mimeType) => {
+// options.fileSizeBytes: tamanho do arquivo em bytes (opcional — validacao SEC-11)
+export const uploadFileToCloudinary = async (fileUri, fileName, mimeType, options = {}) => {
+  // SEC-11: validacao de tamanho antes do upload (20MB para PDFs)
+  const { fileSizeBytes = null } = options;
+  if (fileSizeBytes !== null && fileSizeBytes > 20 * 1024 * 1024) {
+    return { success: false, error: 'Arquivo muito grande. Maximo 20MB.' };
+  }
+
   try {
     const { signature, timestamp, apiKey, cloudName, folder } = await getSignatureFromBackend();
+
+    if (!cloudName) {
+      return { success: false, error: 'Configuracao de upload indisponivel.' };
+    }
 
     const formData = new FormData();
     formData.append('file', {
@@ -63,9 +83,8 @@ export const uploadFileToCloudinary = async (fileUri, fileName, mimeType) => {
     formData.append('signature', signature);
     formData.append('folder', folder);
 
-    const activeCloudName = cloudName || CLOUD_NAME_FALLBACK;
     const response = await fetch(
-      `https://api.cloudinary.com/v1_1/${activeCloudName}/image/upload`,
+      `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
       { method: 'POST', body: formData }
     );
 

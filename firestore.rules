@@ -207,16 +207,24 @@ service cloud.firestore {
     //
     // Atualizacao e delecao: apenas o locador autor do post.
     match /mural_posts/{postId} {
+      // Leitura:
+      //   - Locador ve seus proprios posts.
+      //   - Posts novos: locatario em tenantIds (populado server-side pelo createMuralPostCF).
+      //   - Posts legados (sem tenantIds): compatibilidade via targetType == 'all' (remover pos-migracao).
+      //   - Posts direcionados especificamente via targetTenantId.
       allow read: if request.auth != null && (
         resource.data.landlordId == request.auth.uid
-        || resource.data.targetType == 'all'
+        // SEC-03: posts novos usam tenantIds populado server-side
+        || (resource.data.get('tenantIds', null) != null
+            && request.auth.uid in resource.data.tenantIds)
+        // Posts legados sem tenantIds: manter comportamento anterior (remover pos-migracao)
+        || (resource.data.get('tenantIds', null) == null
+            && resource.data.targetType == 'all')
         || resource.data.targetTenantId == request.auth.uid
       );
 
-      allow create: if request.auth != null
-        && request.resource.data.landlordId == request.auth.uid
-        && request.resource.data.targetType in ['all', 'specific']
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'locador';
+      // SEC-03/08: criacao exclusivamente via createMuralPostCF (admin SDK valida relacionamento)
+      allow create: if false;
 
       allow update: if request.auth != null
         && resource.data.landlordId == request.auth.uid
