@@ -801,6 +801,37 @@ Todas as validações client-side ficam em `src/utils/validation.js`:
 
 ---
 
+## FERRAMENTAS DE DESENVOLVIMENTO — GEMINI MCP
+
+### Invocação do Gemini
+Usar o MCP tool `mcp__gemini-cli__ask-gemini` (testado e funcional em 31/03/2026):
+
+```
+mcp__gemini-cli__ask-gemini
+  prompt: "..."
+  model: "gemini-3.1-pro-preview"   ← padrão para todas as chamadas
+  changeMode: false                  ← Gemini só gera relatorio, nao aplica patches
+```
+
+**Modelos disponíveis:**
+| Modelo | ID | Quando usar |
+|---|---|---|
+| Gemini 3.1 Pro | `gemini-3.1-pro-preview` | **Padrao** — auditorias, analises complexas |
+| Gemini 2.5 Flash | `gemini-2.5-flash` | Somente se usuario pedir velocidade |
+
+> `gemini-3-pro-preview` foi descontinuado em 26/03/2026.
+> `mcp__gemini-cli__ping` falha com `spawn echo ENOENT` — irrelevante, ignorar.
+
+### Workspace do Gemini — CRITICO
+- **Nunca usar sintaxe `@arquivo`** no prompt — faz o Gemini detectar o `package.json` de `functions/` e restringir o workspace, bloqueando escrita fora dessa pasta
+- Passar o conteúdo dos arquivos **colado diretamente no texto** do prompt
+
+### Divisão de responsabilidades
+- **Claude faz direto**: edicoes cirurgicas, correcoes de bugs, mudancas em 1-3 arquivos existentes
+- **Gemini**: criacao de arquivos novos grandes e auditorias / "segunda opiniao"
+
+---
+
 ## MELHORIAS PENDENTES
 
 - [ ] Splash screen customizada
