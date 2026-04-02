@@ -1,48 +1,64 @@
-# CLAUDE.md — Contexto do Projeto BapCar
+# CLAUDE.md — BapCar
 
-## VISÃO GERAL
+App **React Native CLI** (sem Expo) para gestão de aluguel de carros. Backend **Firebase** (Firestore + Auth + FCM + Cloud Functions). Pagamentos via **Asaas**. Upload de mídia via **Cloudinary**. Roda em **Android** (iOS em andamento).
 
-Este é um aplicativo **React Native** (CLI, sem Expo) para **gestão de aluguel de carros** entre locadores e locatários. O backend é **Firebase** (Firestore + Auth + Cloud Messaging). Upload de fotos e documentos usa **Cloudinary**. O app roda apenas em **Android** no momento.
+---
 
-O app facilita o relacionamento locador ↔ locatário, onde:
-- O **locador** cadastra veículos, atribui locatários via solicitação, cria tarefas (KM, fotos, óleo, manutenção), aprova tarefas concluídas e publica avisos no mural.
-- O **locatário** recebe solicitações de vínculo, visualiza seus carros atribuídos, completa tarefas enviando dados/fotos, solicita manutenção e vê avisos do mural.
+## DOCUMENTAÇÃO DETALHADA — LEIA ANTES DE QUALQUER IMPLEMENTAÇÃO
+
+> **INSTRUÇÃO CRÍTICA**: Seu **primeiro passo** em qualquer tarefa é identificar o domínio na tabela abaixo e **ler o arquivo correspondente** antes de explorar o código. Os resumos neste CLAUDE.md são intencionalmente incompletos — os detalhes, regras e edge cases que previnem bugs estão nos arquivos `docs/`.
+
+| Domínio | Arquivo | Quando consultar |
+|---------|---------|-----------------|
+| Esquemas do Firestore (campos, tipos) | `docs/FIRESTORE_SCHEMA.md` | Ao adicionar/modificar campos em qualquer coleção |
+| Índices compostos + regras de segurança | `docs/FIRESTORE_INDEXES.md` | Ao criar novas queries ou índices |
+| Fluxos de autenticação e negócio | `docs/FLOWS.md` | Ao modificar login, cadastro, tarefas, mural, vínculo locador↔locatário |
+| Sistema de pagamentos (Asaas) | `docs/PAYMENTS.md` | Ao trabalhar em contratos, cobranças, webhook, QR PIX |
+| Cloud Functions | `docs/CLOUD_FUNCTIONS.md` | Ao adicionar/modificar qualquer Cloud Function |
+| Navegação e componentes reutilizáveis | `docs/NAVIGATION_COMPONENTS.md` | Ao adicionar telas ou usar componentes compartilhados |
+| Design system e identidade visual | `docs/VISUAL.md` | Ao criar ou modificar UI/estilos |
+| Decisões de arquitetura (Q-codes) | `docs/QUESTIONS.md` | Ao entender o "porquê" de uma decisão técnica |
+| Pipeline iOS | `docs/PLANO-IOS.md` | Ao trabalhar em suporte iOS |
+| Diretrizes de segurança | `docs/seguranca_claude.md` | Ao implementar features sensíveis (auth, PII, pagamentos) |
 
 ---
 
 ## STACK TÉCNICA
 
-### Plataforma
-- React Native CLI (sem Expo)
-- Android (iOS em andamento)
-- Linguagem: JavaScript/TypeScript (telas em .tsx, serviços em .js)
+**Plataforma**: React Native CLI | Android | TypeScript (telas .tsx) / JavaScript (services .js)
 
-### Pacotes principais (manter estas versões)
+**Pacotes principais**
 ```
-@react-native-firebase/app
-@react-native-firebase/auth
-@react-native-firebase/firestore
-@react-native-firebase/messaging
-@react-native-firebase/functions    (para chamadas às Cloud Functions)
+# Firebase
+@react-native-firebase/app, /auth, /firestore, /messaging, /functions
 @react-native-google-signin/google-signin
-@react-navigation/native
-@react-navigation/native-stack
-@react-navigation/bottom-tabs
-@react-navigation/material-top-tabs (para top tabs no FinancialDashboard)
-react-native-pager-view             (dependência do material-top-tabs)
-react-native-image-picker           (para PhotoPicker)
-react-native-pdf                    (para PdfViewer)
-react-native-blob-util              (download de PDFs)
-react-native-gifted-charts          (gráfico de barras no ResumoTab)
-react-native-svg                    (dependência do gifted-charts)
-date-fns                            (para differenceInDays em tasksService)
+
+# Navegação
+@react-navigation/native, /native-stack, /bottom-tabs, /material-top-tabs
+react-native-pager-view, react-native-screens, react-native-safe-area-context
+
+# UI / Mídia
+lucide-react-native            (ícones)
+react-native-image-picker      (câmera/galeria)
+react-native-gifted-charts     (gráficos)
+react-native-svg               (dep. do gifted-charts)
+react-native-linear-gradient
+react-native-flash-message     (toasts)
+
+# Storage / Docs
+@react-native-async-storage/async-storage
+@react-native-clipboard/clipboard
+@react-native-documents/picker
+
+# Utils
+date-fns                       (só differenceInDays em tasksService.js)
 ```
 
-### Serviços externos
-- **Firebase**: Firestore (banco), Auth (autenticação), Cloud Messaging (notificações push), Cloud Functions (lógica de pagamentos)
-- **Cloudinary**: Upload de fotos/documentos (cloud name: `dzjqdjdcz`)
-- **ViaCEP API**: Autocomplete de endereço por CEP (`https://viacep.com.br/ws/{cep}/json/`)
-- **Asaas**: Gateway de pagamento (PIX, boleto). Cada locador tem uma subconta Asaas.
+**Serviços externos**
+- **Firebase**: Firestore (banco), Auth, FCM (push), Cloud Functions gen 2 (Node 20, us-central1)
+- **Cloudinary**: upload de fotos/docs — cloud name `dzjqdjdcz`
+- **ViaCEP**: autocomplete de CEP — `https://viacep.com.br/ws/{cep}/json/`
+- **Asaas**: gateway de pagamento (PIX, boleto) — cada locador tem subconta própria
 
 ---
 
@@ -50,831 +66,169 @@ date-fns                            (para differenceInDays em tasksService)
 
 ```
 /
-├── App.tsx                          # Entry point, navegação, tabs, auth flow
-├── functions/                       # Firebase Cloud Functions (Node 20, gen 2)
-│   ├── index.js                     # Exports de todas as Cloud Functions
+├── App.tsx                    # entry point: navegação, tabs, auth flow
+├── functions/                 # Cloud Functions (Node 20, gen 2) — 24 funções
+│   ├── index.js               # exports de todas as CFs
 │   └── src/
-│       ├── asaas/
-│       │   ├── client.js            # Axios config + createSubaccountClient(apiKey)
-│       │   ├── accounts.js          # createSubaccount (onboarding Asaas)
-│       │   ├── customers.js         # createOrGetCustomer
-│       │   └── payments.js          # createPayment, getPixQrCode
-│       ├── handlers/
-│       │   ├── onboarding.js        # createAsaasSubaccount, checkOnboarding (callable)
-│       │   ├── charges.js           # createCharge, cancelCharge, editCharge, getPixQrCode, generateRecurringCharges (cron)
-│       │   ├── contracts.js         # createContract, cancelContract, editContract (callable)
-│       │   ├── webhooks.js          # asaasWebhook (onRequest — recebe eventos Asaas)
-│       │   ├── cloudinarySign.js    # getCloudinarySignature (callable)
-│       │   ├── notifications.js     # sendPushNotification (trigger onDocumentCreated)
-│       │   ├── taskNotifications.js # notifyOverdueTasks (scheduled)
-│       │   ├── tenantAssignment.js  # assignTenantCF (callable — Q1.4)
-│       │   └── carManagement.js     # deleteCarCF (callable — Q2.3)
-│       ├── scripts/
-│       │   └── apply-iam.js         # Aplica IAM policy pos-deploy (postdeploy hook)
-│       └── utils/
-│           ├── validators.js
-│           └── rateLimiter.js       # checkRateLimit — rate limiting via Firestore (Q1.10)
+│       ├── asaas/             # cliente HTTP e helpers da API Asaas
+│       ├── handlers/          # um arquivo por domínio de CF (charges, contracts, webhooks, etc.)
+│       ├── scripts/           # apply-iam.js (pós-deploy), scripts de migração
+│       ├── tests/             # testes de CFs e mocks
+│       └── utils/             # validators.js, rateLimiter.js
 ├── src/
-│   ├── config/
-│   │   ├── firebase.js              # export { auth, firestore, messaging }
-│   │   └── cloudinary.js            # getPdfPreviewUrl, getPdfFullUrl, CLOUD_NAME
-│   ├── services/
-│   │   ├── authService.js           # Login, registro, Google Sign-In, verificação email
-│   │   ├── carsService.js           # CRUD carros, assign/remove tenant
-│   │   ├── tasksService.js          # CRUD tarefas, geração automática, aprovação
-│   │   ├── tenantRequestService.js  # Solicitações de vínculo locador→locatário
-│   │   ├── usersService.js          # getUserById, getAvailableTenants, searchByEmail
-│   │   ├── muralService.js          # CRUD posts do mural
-│   │   ├── notificationService.js   # FCM tokens, createNotification
-│   │   └── paymentService.js        # Contratos, cobranças, dashboard financeiro
-│   ├── screens/
-│   │   ├── LoginScreen.tsx
-│   │   ├── RegisterScreen.tsx
-│   │   ├── EmailVerificationScreen.tsx
-│   │   ├── PermissionsScreen.tsx    # Solicita permissões (notificações, etc.)
-│   │   ├── GoogleCompleteProfileScreen.tsx
-│   │   ├── HomeScreen.tsx
-│   │   ├── TasksScreen.tsx
-│   │   ├── TaskDetailsScreen.tsx
-│   │   ├── ProfileScreen.tsx
-│   │   ├── CarDetailsScreen.tsx
-│   │   ├── AddCarScreen.tsx
-│   │   ├── EditCarScreen.tsx
-│   │   ├── AssignTenantScreen.tsx
-│   │   ├── TenantDetailsScreen.tsx
-│   │   ├── MuralManagerScreen.tsx
-│   │   ├── FinancialDashboardScreen.tsx  # Tab Financeiro do locador (top tabs)
-│   │   ├── ContractDetailsScreen.tsx     # Detalhes + edição de contrato
-│   │   ├── PaymentContractScreen.tsx     # Criar novo contrato de aluguel
-│   │   ├── ChargesScreen.tsx             # Criar cobrança avulsa
-│   │   ├── PaymentDetailsScreen.tsx      # Detalhes de uma cobrança (QR PIX, status)
-│   │   └── TenantPaymentsScreen.tsx      # Aba Pagamentos do locatário
-│   ├── components/
-│   │   ├── ImageViewer.tsx          # Modal fullscreen zoom/share/download
-│   │   ├── PhotoPicker.tsx          # Câmera ou galeria → upload Cloudinary
-│   │   ├── PdfViewer.tsx            # Visualizador PDF inline
-│   │   ├── DocumentPicker.tsx       # Seleção de documentos PDF
-│   │   └── financial/
-│   │       ├── FinancialDataContext.tsx  # Contexto compartilhado (contratos + cobranças)
-│   │       ├── ResumoTab.tsx            # Cards de totais + BarChart últimos 6 meses
-│   │       ├── ContratosTab.tsx         # Lista contratos → navega para ContractDetails
-│   │       └── CobrancasTab.tsx         # Lista cobranças com filtros por carro e status
-│   └── utils/
-│       └── validation.js            # validateCpf, validateEmail, validateDate,
-│                                    # validatePhone, validatePassword, sanitizeText,
-│                                    # sanitizeNumeric, fetchAddressByCep, formatCep
-└── android/                         # Configurações Android nativas
+│   ├── config/                # firebase.js, cloudinary.js — inicialização de SDKs
+│   ├── services/              # toda comunicação com Firebase/APIs; um arquivo por domínio
+│   ├── screens/               # telas do app (.tsx); uma por funcionalidade
+│   ├── components/            # componentes reutilizáveis; financial/ para o dashboard
+│   └── utils/                 # validation.js, retry.js, cache.js
+└── android/                   # config nativa Android
 ```
+
+> Para a lista completa de arquivos por pasta, use as ferramentas de leitura de diretório. A estrutura acima descreve o propósito de cada camada.
 
 ---
 
-## FIRESTORE — COLEÇÕES E ESQUEMA
+## FIRESTORE
 
-### `users/{userId}`
-```javascript
-{
-  // === DOC PÚBLICO === (sem PII — Q1.2 Fase C)
-  email: string,                    // email (lowercase)
-  name: string,
-  role: 'locador' | 'locatario',
-  authProvider: 'email' | 'google',
-  emailVerified: boolean,
-  emailVerifiedAt: Timestamp | null,
-  googlePhotoUrl: string | null,
+O banco é **Firestore** (NoSQL). PII de usuários (CPF, CNPJ, telefone) fica em subcollection separada `users/{uid}/private/data` — inacessível pelo app, apenas via Cloud Functions com admin SDK. As demais coleções são acessadas diretamente pelo app com as regras definidas em `firestore.rules`.
 
-  // === SUBCOLLECTION private/data === (PII — acesso apenas via admin SDK / CFs)
-  // users/{uid}/private/data
-  phone: string,                    // apenas dígitos (ex: "11999998888")
-  cpf: string,                      // apenas dígitos (ex: "12345678900")
-  cnpj: string,                     // apenas dígitos; preenchido se PJ ou MEI
-  birthDate: string,                // "DD/MM/AAAA"
-  personType: 'pf' | 'pj' | 'mei', // só locador seleciona; locatário é sempre 'pf'
-  companyName: string,              // razão social; preenchido se PJ ou MEI
+| Coleção | Propósito |
+|---------|-----------|
+| `users/{uid}` | Perfil público (sem PII). PII em `users/{uid}/private/data` |
+| `cars/{carId}` | Veículos — pertence ao locador, opcionalmente atribuído a locatário |
+| `tasks/{taskId}` | Tarefas (km, foto, óleo, manutenção) — pendentes e concluídas |
+| `tenantRequests/{id}` | Solicitações de vínculo locador→locatário |
+| `mural/{postId}` | Avisos do mural criados pelo locador |
+| `notifications/{id}` | Notificações in-app — trigger Firestore dispara push FCM real |
+| `asaasAccounts/{uid}` | Subcontas Asaas — **bloqueado para o app**, apenas CFs via admin SDK |
+| `rentalContracts/{id}` | Contratos de aluguel (max 1 ativo por carro) |
+| `charges/{id}` | Cobranças individuais (avulsas ou vinculadas a contrato) |
 
-  // Endereço (em private/data)
-  cep: string,
-  street: string,
-  number: string,
-  complement: string,
-  neighborhood: string,
-  city: string,
-  state: string,                    // UF (2 chars)
-  address: string,                  // endereço completo formatado
-
-  // CNH e documentos (APENAS locatário — em private/data)
-  cnhNumber: string,
-  cnhCategory: string,              // "A", "B", "AB", "C", "D", "E", etc.
-  cnhExpiry: string,                // "DD/MM/AAAA"
-  cnhFrontPhoto: string,            // URL Cloudinary
-  cnhBackPhoto: string,             // URL Cloudinary
-  residenceProofPhoto: string,      // URL Cloudinary
-
-  // FCM
-  fcmToken: string | null,
-  fcmTokenUpdatedAt: Timestamp | null,
-
-  createdAt: Timestamp,
-}
-```
-
-### `cars/{carId}`
-```javascript
-{
-  landlordId: string,               // userId do locador dono
-  tenantId: string | null,          // userId do locatário atribuído (null = disponível)
-  status: 'available' | 'rented',   // muda ao atribuir/remover locatário
-  brand: string,                    // ex: "Toyota"
-  model: string,                    // ex: "Corolla"
-  year: number,
-  plate: string,                    // ex: "ABC1D23" (uppercase)
-  color: string,
-  photo: string | null,             // URL Cloudinary da foto do carro
-  initialKm: number,
-  totalKm: number,                  // última quilometragem reportada
-  lastOilChangeKm: number,          // km na última troca de óleo
-  lastKmUpdate: Timestamp,          // quando foi a última atualização de KM
-  lastPhotoInspection: Timestamp,   // quando foi a última inspeção fotográfica
-  documents: {                      // objeto com documentos (PDFs no Cloudinary)
-    crlve: { url, name, uploadedAt },
-    ipva: { url, name, uploadedAt },
-    licenciamento: { url, name, uploadedAt },
-    seguro: { url, name, uploadedAt },
-    crv: { url, name, uploadedAt },
-  } | null,
-  createdAt: Timestamp,
-  updatedAt: Timestamp | null,
-}
-```
-
-### `tasks/{taskId}`
-```javascript
-{
-  carId: string,
-  tenantId: string | null,
-  landlordId: string | null,            // indexado para getAllUserTasks do locador (Q9.5)
-  type: 'km_update' | 'photo_inspection' | 'oil_change' | 'maintenance',
-  title: string,
-  description: string,
-  status: 'pending' | 'completed',
-  dueDate: Timestamp,
-  createdAt: Timestamp,
-  completedAt: Timestamp | null,
-  manualRequest: boolean,           // true = criada manualmente pelo locador
-
-  // Aprovação (locador avalia tarefas concluídas)
-  approved: boolean | undefined,
-  approvedAt: Timestamp | null,
-  revisionRequested: boolean | undefined,
-  revisionReason: string | undefined,
-  revisionRequestedAt: Timestamp | null,
-
-  // Dados de conclusão — variam por tipo:
-
-  // km_update:
-  previousKm: number,
-  newKm: number,
-  dashboardPhotoUrl: string,        // foto do hodômetro
-
-  // photo_inspection:
-  photosByAngle: {
-    frente: [url, ...],
-    traseira: [url, ...],
-    lado_esquerdo: [url, ...],
-    lado_direito: [url, ...],
-    painel: [url, ...],
-    banco_dianteiro: [url, ...],
-    banco_traseiro: [url, ...],
-    porta_malas: [url, ...],
-    motor: [url, ...],
-  },
-
-  // oil_change:
-  previousOilKm: number,
-  currentKm: number,
-  stickerPhotoUrl: string,          // foto do adesivo
-  receiptPhotoUrl: string,          // foto do recibo
-
-  // maintenance:
-  maintenanceDescription: string,
-  maintenanceType: string,
-  maintenancePhotos: [url, ...],
-  maintenanceCost: string,
-  maintenanceDate: string,
-  workshopName: string,
-}
-```
-
-### `tenantRequests/{requestId}`
-```javascript
-{
-  landlordId: string,
-  tenantId: string,
-  carId: string,
-  carInfo: string,                  // ex: "Toyota Corolla (ABC1D23)"
-  landlordName: string,
-  status: 'pending' | 'accepted' | 'rejected' | 'cancelled',
-  createdAt: Timestamp,
-  respondedAt: Timestamp | null,
-}
-```
-
-### `mural/{postId}`
-```javascript
-{
-  landlordId: string,
-  title: string,
-  content: string,
-  category: 'geral' | 'pagamento' | 'contato' | 'regras' | 'aviso' | 'urgente',
-  targetType: 'all' | 'specific',
-  targetTenantId: string | null,    // se específico para um locatário
-  targetCarId: string | null,       // se específico para um carro
-  pinned: boolean,
-  createdAt: Timestamp,
-  updatedAt: Timestamp,
-}
-```
-
-### `notifications/{notifId}`
-```javascript
-{
-  userId: string,                   // destinatário
-  title: string,
-  body: string,
-  data: object,                     // metadados (carId, type, etc.)
-  read: boolean,
-  sent: boolean,
-  createdAt: Timestamp,
-}
-```
-
-### `asaasAccounts/{userId}`
-```javascript
-{
-  asaasAccountId: string,           // ID da subconta no Asaas
-  walletId: string,                 // Wallet ID da subconta
-  apiKey: string,                   // API Key da subconta (NUNCA exposta ao cliente)
-  status: string,                   // status da subconta no Asaas
-  isCreating: boolean,              // true enquanto o onboarding está em andamento (lock TTL 10min)
-  createdAt: Timestamp,
-  updatedAt: Timestamp,
-}
-```
-
-### `rentalContracts/{contractId}`
-```javascript
-{
-  carId: string,
-  tenantId: string,
-  landlordId: string,
-  rentAmount: number,               // valor padrão recorrente do aluguel
-  frequency: 'MONTHLY' | 'WEEKLY' | 'BIWEEKLY',
-  billingType: 'PIX' | 'BOLETO',
-  startDate: string,                // "YYYY-MM-DD"
-  nextDueDate: string,              // "YYYY-MM-DD" — próxima data a ser cobrada pelo cron
-  dayOfMonth: number | null,        // dia alvo para cobranças mensais
-  carInfo: string,                  // ex: "Toyota Corolla (ABC1D23)"
-  tenantName: string,
-  landlordName: string,
-  active: boolean,                  // false quando contrato encerrado
-  pausedAt: Timestamp | null,
-  cancelledAt: Timestamp | null,
-  nextChargeOverride: {             // override pontual do valor da próxima cobrança (mensal)
-    amount: number,
-    setAt: Timestamp,
-  } | null,
-  lastRecurringError: string | undefined,   // última mensagem de erro do cron
-  lastRecurringErrorAt: Timestamp | undefined,
-  createdAt: Timestamp,
-  updatedAt: Timestamp,
-}
-```
-
-### `charges/{chargeId}`
-```javascript
-{
-  contractId: string | null,        // null se cobrança avulsa
-  carId: string,
-  landlordId: string,
-  tenantId: string,
-  amount: number,                   // valor cobrado
-  netAmount: number | null,         // valor líquido após taxa Asaas (preenchido pelo webhook)
-  platformFee: number | null,       // taxa da plataforma (preenchida pelo webhook)
-  billingType: 'PIX' | 'BOLETO',
-  status: 'PENDING' | 'RECEIVED' | 'CONFIRMED' | 'OVERDUE' | 'CANCELLED',
-  asaasPaymentId: string,           // ID da cobrança no Asaas
-  invoiceUrl: string | null,        // URL da fatura Asaas
-  bankSlipUrl: string | null,       // URL do boleto
-  pixQrCodeUrl: string | null,      // URL do QR Code PIX (preenchida sob demanda)
-  pixCopiaECola: string | null,     // código PIX copia-e-cola
-  transactionReceiptUrl: string | null, // URL do comprovante Asaas (preenchida pelo webhook ao pagar)
-  dueDate: string,                  // "YYYY-MM-DD"
-  paymentDate: string | null,       // "YYYY-MM-DD" — preenchida pelo webhook quando pago
-  description: string,
-  carInfo: string | null,
-  processedEvents: string[],        // IDs de eventos Asaas já processados (idempotência webhook)
-  notificationFlags: {              // flags de idempotência para notificações do cron
-    warning3Days: boolean,
-  } | undefined,
-  createdAt: Timestamp,
-  updatedAt: Timestamp,
-}
-```
+**Ao modificar campos, criar queries ou índices → leia `docs/FIRESTORE_SCHEMA.md` e `docs/FIRESTORE_INDEXES.md`.**
 
 ---
 
-## FIRESTORE — REGRAS DE SEGURANÇA
+## FLUXOS DE AUTENTICAÇÃO E NEGÓCIO
 
-As regras estão em `firestore.rules` e seguem:
-- `users`: escrita restrita ao próprio `userId`; leitura autenticada
-- `charges`: leitura restrita a `landlordId` ou `tenantId` da cobrança; escrita apenas por autenticado
-- `rentalContracts`: escrita restrita ao `landlordId`; leitura autenticada
-- Demais coleções: leitura e escrita para qualquer usuário autenticado
-- `asaasAccounts`: leitura/escrita bloqueada para o cliente — acessada apenas via Cloud Functions (admin SDK)
+O app tem dois papéis: **locador** (dono dos carros) e **locatário** (motorista). O cadastro coleta dados em steps progressivos (4 steps para locador, 6 para locatário incluindo CNH). Login aceita email ou CPF (via `findEmailByIdentifierCF`). Locadores atribuem locatários via sistema de solicitação — o locatário aceita ou recusa. Tarefas são geradas automaticamente (km a cada 7 dias, foto a cada 10, óleo a cada 10.000 km) e também manualmente pelo locador.
+
+**Ao modificar login, cadastro, vínculo locador↔locatário ou fluxo de tarefas → leia `docs/FLOWS.md`.**
 
 ---
 
-## FIRESTORE — QUERIES E ÍNDICES
+## SISTEMA DE PAGAMENTOS
 
-### Estratégia de Índices
+Cada locador tem uma **subconta Asaas** (gateway de pagamento) criada via onboarding. Contratos geram cobranças recorrentes via cron diário. O webhook Asaas atualiza status em tempo real. A `apiKey` da subconta nunca sai do Firestore — toda interação com Asaas é via Cloud Functions. Há regras de idempotência, tratamento de race conditions e ordem de operações críticas que **não estão documentadas aqui**.
 
-Composite indexes são bem-vindos e recomendados quando melhoram a performance das queries. **Não evitar** — usar sempre que a query precisar. A única regra é: **documentar todo índice composto** neste arquivo e manter o `firestore.indexes.json` atualizado para que o deploy funcione em qualquer ambiente.
-
-**Workflow para novos índices:**
-1. Criar a query no código normalmente (com `where`, `orderBy`, etc.)
-2. Se o Firestore pedir índice, o erro inclui link direto para criação
-3. Após criar, exportar: `firebase firestore:indexes > firestore.indexes.json`
-4. Commitar o `firestore.indexes.json` atualizado
-5. Documentar o índice na tabela abaixo
-
-**Deploy de índices** (em qualquer ambiente novo):
-```bash
-firebase deploy --only firestore:indexes
-```
-
-### Registro de Índices Compostos (20 ativos) + 3 fieldOverrides collection group
-
-| Coleção | Campos | Usado em |
-|---------|--------|----------|
-| `cars` | landlordId ↑ + createdAt ↓ | `getCarsByLandlord`, `subscribeToCars` |
-| `mural_posts` | landlordId ↑ + createdAt ↓ | `getPostsByLandlord` |
-| `mural_posts` | landlordId ↑ + targetType ↑ + createdAt ↓ | `getPostsForTenant` (posts gerais) |
-| `mural_posts` | targetTenantId ↑ + createdAt ↓ | `getPostsForTenant` (posts específicos) |
-| `tasks` | carId ↑ + status ↑ + completedAt ↑ | `getCarTasks` (completed, asc) |
-| `tasks` | carId ↑ + status ↑ + completedAt ↓ | `getCarTasks` (completed, desc) |
-| `tasks` | carId ↑ + status ↑ + createdAt ↓ | `getCarTasks` (por criação) |
-| `tasks` | carId ↑ + status ↑ + dueDate ↑ | `getCarTasks` (pending, por prazo) |
-| `tasks` | carId ↑ + type ↑ + status ↑ | `_hasPendingTask` |
-| `tasks` | status ↑ + dueDate ↑ | `notifyOverdueTasks` (cron) |
-| `tasks` | landlordId ↑ + status ↑ + dueDate ↑ | `getAllUserTasks` locador pending (Q9.5) |
-| `tasks` | landlordId ↑ + status ↑ + completedAt ↓ | `getAllUserTasks` locador completed (Q9.5) |
-| `tasks` | carId ↑ + tenantId ↑ + status ↑ + dueDate ↑ | `getCarTasks` locatario pending (Q8.2) |
-| `tasks` | carId ↑ + tenantId ↑ + status ↑ + completedAt ↓ | `getCarTasks` locatario completed (Q8.2) |
-| `tenantRequests` | carId ↑ + status ↑ | `getSentRequests` |
-| `tenantRequests` | carId ↑ + tenantId ↑ + status ↑ | `createContract` (validação) |
-| `tenantRequests` | tenantId ↑ + status ↑ + createdAt ↓ | `getPendingRequests` |
-| `charges` | landlordId ↑ + carId ↑ + dueDate ↓ | `getChargesByCar` (Q3.1) |
-| `rentalContracts` | carId ↑ + landlordId ↑ + active ↑ | `getContractByCar` locador (Q10.5) |
-| `rentalContracts` | carId ↑ + tenantId ↑ + active ↑ | `getContractByCar` locatario (Q10.5) |
-| `users` | role ↑ + email ↑ | `searchTenantsCF` busca por email (Q1.6) |
-
-**fieldOverrides (collection group `private` — Q1.2 Fase C):**
-| Campo | queryScope | Usado em |
-|-------|-----------|----------|
-| `cpf` | COLLECTION_GROUP | `checkPiiUniqueCF`, `findEmailByIdentifierCF`, `searchTenantsCF` |
-| `cnpj` | COLLECTION_GROUP | `checkPiiUniqueCF`, `findEmailByIdentifierCF` |
-| `phone` | COLLECTION_GROUP | `checkPiiUniqueCF` |
-
-> **Manter esta tabela e o `firestore.indexes.json` atualizados** ao criar novos índices.
-> Exportar: `firebase firestore:indexes > firestore.indexes.json`
+**Ao trabalhar em qualquer feature de pagamento → leia `docs/PAYMENTS.md`.**
 
 ---
 
-## FLUXOS DE AUTENTICAÇÃO
+## CLOUD FUNCTIONS
 
-### Cadastro Email (RegisterScreen)
-1. **Step 1**: Escolher role (locador / locatário)
-2. **Step 2**: Nome, email, telefone, senha, confirmar senha
-3. **Step 3**: CPF, data nascimento + (locador: tipo pessoa PF/PJ/MEI, CNPJ se aplicável)
-4. **Step 4**: Endereço completo (CEP com autocomplete ViaCEP)
-5. **(Locatário) Step 5**: CNH (número, categoria, validade, foto frente, foto verso)
-6. **(Locatário) Step 6**: Comprovante de residência (foto)
-7. → Conta criada → Login → EmailVerificationScreen
+São **24 funções** no total, deployadas como gen 2 (Cloud Run) em `us-central1`, Node 20. Divididas em: callables (chamadas pelo app), scheduled (cron) e triggers (Firestore). Todas as callables têm rate limiting via `rateLimiter.js`. **Atenção pós-deploy**: a org policy do GCP bloqueia `invoker: 'public'` automático — é obrigatório rodar `apply-iam.js` após cada deploy para liberar invocação pública.
 
-**Locador**: 4 steps (até endereço) | **Locatário**: 6 steps (inclui CNH + comprovante)
-
-### Cadastro Google (GoogleCompleteProfileScreen)
-1. **Step 1**: Escolher role + nome + telefone (email vem do Google)
-2. **Step 2**: CPF, data nascimento + (locador: tipo pessoa, CNPJ)
-3. **Step 3**: Endereço completo (CEP com autocomplete)
-4. **(Locatário) Step 4**: CNH + fotos
-5. **(Locatário) Step 5**: Comprovante de residência
-6. → App direto (email já verificado pelo Google)
-
-**Locador Google**: 3 steps | **Locatário Google**: 5 steps
-
-### Login
-- Email + senha OU CPF + senha (detecta automaticamente)
-- Google Sign-In
-- "Esqueci minha senha" → envia link de reset
-
-### Verificação de Email
-- Tela dedicada com verificação automática a cada 5 segundos
-- Botão "Já Verifiquei" para check manual
-- Reenviar com cooldown de 60 segundos
-- Usuários Google pulam esta tela
+**Ao adicionar ou modificar qualquer Cloud Function → leia `docs/CLOUD_FUNCTIONS.md`.**
 
 ---
 
-## FLUXOS DE NEGÓCIO
+## NAVEGAÇÃO E TELAS
 
-### Atribuição de Locatário (Sistema de Solicitação)
-1. Locador vai em CarDetails → "Atribuir Locatário" (AssignTenantScreen)
-2. Busca por **email** (prefix match) ou **CPF** (match exato)
-3. Clica "Enviar" → cria `tenantRequest` com status `pending`
-4. Locatário vê card na HomeScreen seção "Solicitações Pendentes"
-5. **Aceitar**: `tenantRequest` → `accepted`, carro recebe `tenantId`, outras solicitações pendentes para o mesmo carro são canceladas automaticamente
-6. **Recusar**: `tenantRequest` → `rejected`, locador é notificado
-7. Locador pode **cancelar** solicitações enviadas
+O app usa React Navigation com **bottom tabs** (Carros, Tarefas, Pagamentos¹, Mural², Financeiro², Perfil) e um **stack navigator** para telas de detalhe. ¹Visível só para locatário. ²Visível só para locador. Componentes reutilizáveis principais: `ImageViewer`, `PhotoPicker`, `DocumentPicker`, e os componentes da pasta `financial/`.
 
-**Regra**: Cada locatário só pode ter **1 carro** atribuído por vez (verificação em `carsService.checkTenantHasCar`).
-
-### Remoção de Locatário
-- Locador pode remover via CarDetailsScreen → "Remover Locatário"
-- Antes de desatribuir: `paymentService.cancelActiveContractByCar(carId)` cancela o contrato ativo + todas as cobranças PENDING/OVERDUE
-- Volta carro para `status: 'available'`, `tenantId: null`
-- Tarefas pendentes do carro permanecem no Firestore (não são deletadas)
-
-### Tarefas — Geração Automática
-O sistema gera tarefas automaticamente baseado em intervalos:
-
-| Tipo | Intervalo | Prazo |
-|------|-----------|-------|
-| `km_update` | A cada **7 dias** sem atualização | 3 dias |
-| `photo_inspection` | A cada **10 dias** sem inspeção | 5 dias |
-| `oil_change` | A cada **10.000 km** rodados | 7 dias |
-
-A geração ocorre quando `generateAutomaticTasks(carId, carData)` é chamada (tipicamente ao abrir detalhes do carro). Só gera se não houver tarefa pendente do mesmo tipo para aquele carro.
-
-### Tarefas — Criação Manual
-O locador pode criar tarefas manuais na CarDetailsScreen para qualquer tipo (`km_update`, `photo_inspection`, `oil_change`, `maintenance`). Tarefas manuais têm `manualRequest: true`.
-
-### Tarefas — Solicitação de Manutenção pelo Locatário
-O locatário pode solicitar manutenção via CarDetailsScreen (botão "Solicitar Manutenção"). Cria tarefa `maintenance` com tipo e descrição.
-
-### Tarefas — Conclusão
-Cada tipo tem formulário específico no TaskDetailsScreen:
-
-- **km_update**: Locatário informa nova KM + foto do hodômetro
-- **photo_inspection**: Locatário tira fotos em 9 ângulos obrigatórios (frente, traseira, lados, painel, bancos, porta-malas, motor)
-- **oil_change**: Locatário informa KM atual + foto do adesivo + foto do recibo
-- **maintenance**: Locatário descreve serviço feito + fotos + custo + data + oficina
-
-### Tarefas — Aprovação / Revisão (Locador)
-1. Locador abre tarefa concluída → vê botões "Aprovar" e "Solicitar Correção"
-2. **Aprovar**: `approved: true`, badge verde "Aprovada"
-3. **Solicitar Correção**: tarefa volta para `status: 'pending'`, `revisionRequested: true`, `revisionReason: "..."`, locatário é notificado
-4. Locatário vê banner amarelo "Correção Solicitada" com motivo
-5. Locatário refaz e completa novamente
-
-### Mural
-- Locador cria avisos com categorias: `geral`, `pagamento`, `contato`, `regras`, `aviso`, `urgente`
-- Pode direcionar: todos locatários, locatário específico, ou carro específico
-- Posts podem ser fixados (`pinned`)
-- Locatário vê posts do seu locador na HomeScreen
-
----
-
-## SISTEMA DE PAGAMENTOS (ASAAS)
-
-### Onboarding do Locador
-1. Antes de criar contratos/cobranças, o locador precisa ter uma **subconta Asaas**
-2. `checkOnboarding` (Cloud Function) verifica se a subconta existe no Firestore (`asaasAccounts/{uid}`)
-3. Se não existe, locador chama `createAsaasSubaccount` → cria subconta via API Asaas e salva `apiKey` + `walletId` no Firestore
-4. **Lock com TTL de 10 minutos** (`isCreating: true`) previne criação duplicada de subcontas
-5. O webhook da Asaas é **cadastrado automaticamente** na subconta durante o onboarding
-6. A `apiKey` da subconta **nunca é exposta ao app** — fica somente no Firestore, acessada apenas via Cloud Functions
-
-### Contratos de Aluguel
-1. Locador abre `CarDetailsScreen` → "Configurar Pagamento" (só disponível se carro tem locatário) → `PaymentContractScreen`
-2. Preenche: valor do aluguel, frequência (mensal/semanal/quinzenal), tipo de cobrança (PIX/boleto), data inicial
-3. Cloud Function `createContractCF` valida:
-   - Carro pertence ao locador
-   - Locatário está vinculado ao carro
-   - Existe `tenantRequest` aceita entre locatário e carro
-   - Não existe contrato ativo para o carro (transação Firestore para prevenir race condition)
-4. Após criar contrato, cobranças iniciais são geradas automaticamente:
-   - **Mensal**: 1ª cobrança criada imediatamente se `startDate == hoje`
-   - **Semanal**: lote de cobranças para todo o mês atual
-   - **Quinzenal**: 1ª cobrança criada imediatamente
-
-**Regra**: Cada carro pode ter no máximo **1 contrato ativo** por vez.
-
-### Cobranças Recorrentes (Cron)
-- Cloud Function `generateRecurringCharges` executa **diariamente às 08h (America/Sao_Paulo)**
-- **Mensal**: processa se `nextDueDate <= hoje + 5 dias`
-- **Semanal**: processa se `nextDueDate <= último dia do mês atual` — gera lote do mês
-- **Quinzenal**: processa se `nextDueDate <= hoje + 16 dias` — garante 1 cobrança futura pending
-- Idempotência: ignora cobranças já existentes com mesmo `contractId + dueDate` (exceto CANCELLED)
-- Em caso de falha, `nextDueDate` não avança — cron retenta no dia seguinte
-- `nextChargeOverride`: se definido no contrato, a próxima cobrança mensal usa esse valor e o campo é limpo após uso
-
-### Cobranças Avulsas
-- Locador pode criar cobrança avulsa via `ChargesScreen` (sem vínculo a contrato)
-- Validação: carro pertence ao locador + locatário está vinculado ao carro
-
-### Edição de Cobrança
-- Locador pode editar valor de uma cobrança PENDING/OVERDUE
-- Cloud Function `editCharge`:
-  1. Cria nova cobrança no Asaas com novo valor
-  2. Atualiza Firestore com novo `asaasPaymentId` ANTES de deletar a antiga
-  3. Deleta cobrança antiga no Asaas
-  (ordem garante consistência se o webhook chegar durante a operação)
-
-### Edição de Contrato
-- Locador pode editar `rentAmount` permanente do contrato via `ContractDetailsScreen`
-- Também pode definir `nextChargeOverride` para alterar o valor pontual da próxima cobrança mensal
-- Cloud Function `editContract` valida ownership e que o contrato está ativo
-
-### Cancelamento de Cobrança
-- Locador pode cancelar cobranças PENDING/OVERDUE (não pode cancelar RECEIVED/CONFIRMED)
-- Cloud Function `cancelCharge`:
-  - Se Asaas retornar 404: prossegue (já deletado)
-  - Se Asaas retornar erro não-404: faz GET para verificar status real (webhook pode ter falhado) e sincroniza Firestore
-
-### Webhook Asaas
-- URL: `https://asaaswebhook-3sd2w2j7mq-uc.a.run.app`
-- Cadastrado automaticamente em cada subconta durante o onboarding
-- Atualiza `status`, `paymentDate`, `netAmount`, `platformFee` no Firestore via transação atômica
-- `processedEvents[]` garante idempotência (mesmo evento não processado duas vezes)
-- Suporta eventos: `PAYMENT_RECEIVED`, `PAYMENT_CONFIRMED`, `PAYMENT_OVERDUE`, `PAYMENT_DELETED`, `PAYMENT_UPDATED`
-
-### QR Code PIX
-- Gerado sob demanda via Cloud Function `getPixQrCode`
-- Somente `tenantId` ou `landlordId` da cobrança podem solicitar
-- No `PaymentDetailsScreen`, QR Code recarrega automaticamente ao mudar de status PENDING → OVERDUE
-
-### Aba Financeiro (Locador)
-- Substitui a aba "Adicionar Carro" no bottom tab
-- `FinancialDashboardScreen` com **top tabs**:
-  - **Resumo**: cards de totais (recebido, pendente, vencido) + BarChart dos últimos 6 meses
-  - **Contratos**: lista todos os contratos (ativos primeiro) → navega para `ContractDetailsScreen`
-  - **Cobranças**: lista com filtros por carro e por status
-- `AddCarScreen` foi movido para stack screen; card "Adicionar Carro" está na HomeScreen
-
-### Aba Pagamentos (Locatário)
-- Bottom tab 💳 "Pagamentos" visível apenas para locatários
-- `TenantPaymentsScreen`: lista cobranças onde `tenantId == uid` do locatário
-- Navega para `PaymentDetailsScreen` para ver detalhes e pagar via PIX
-
-### Notificações de Pagamento
-Eventos que geram notificações (salvas em `notifications/`):
-- Novo contrato criado → locatário
-- Contrato encerrado → locatário
-- Contrato editado (valor alterado) → locatário
-- Nova cobrança criada → locatário
-- Cobrança cancelada → locatário
-- Cobrança editada (valor alterado) → locatário
-- Cobrança vencendo em 3 dias → locatário (via cron, com flag de idempotência `notificationFlags.warning3Days`)
-
----
-
-## CLOUD FUNCTIONS (INFRA)
-
-### Runtime
-- Firebase Cloud Functions **gen 2** (Cloud Run), Node 20
-- Todas deployadas em `us-central1`
-- IAM policy `roles/run.invoker` para `allUsers` aplicada manualmente após deploy (org policy bloqueia `invoker: 'public'` automático)
-
-### Funções deployadas
-| Nome | Tipo | Descrição |
-|------|------|-----------|
-| `createAsaasSubaccount` | Callable | Onboarding do locador no Asaas |
-| `checkOnboarding` | Callable | Verifica se locador tem subconta Asaas |
-| `createContractCF` | Callable | Cria contrato de aluguel |
-| `editContract` | Callable | Edita `rentAmount` do contrato |
-| `createCharge` | Callable | Cria cobrança (avulsa ou de contrato) |
-| `cancelCharge` | Callable | Cancela cobrança PENDING/OVERDUE |
-| `editCharge` | Callable | Edita valor de cobrança PENDING |
-| `getPixQrCode` | Callable | Obtém QR Code PIX de uma cobrança |
-| `getCloudinarySignature` | Callable | Gera assinatura para upload seguro ao Cloudinary |
-| `generateRecurringCharges` | Scheduled (cron diário 08h SP) | Gera cobranças recorrentes |
-| `asaasWebhook` | onRequest (HTTPS) | Recebe eventos de pagamento do Asaas |
-| `sendPushNotification` | onDocumentCreated (trigger) | Envia push via FCM ao criar em `notifications/` |
-| `notifyOverdueTasks` | Scheduled (cron diário) | Notifica tarefas vencidas |
-| `assignTenantCF` | Callable | Atribui locatário ao carro atomicamente (Q1.4) |
-| `deleteCarCF` | Callable | Exclui carro com cascade completo (Q2.3) |
-| `getTenantDetailsCF` | Callable | Retorna PII do locatário via admin SDK (Q1.2) |
-| `deleteAccountCF` | Callable | Exclui conta com cascade LGPD (Q5.4) |
-| `checkPiiUniqueCF` | Callable (sem auth) | Verifica unicidade de CPF/CNPJ/phone via admin SDK (Q1.2 Fase C) |
-| `findEmailByIdentifierCF` | Callable (sem auth) | Busca email por CPF/CNPJ para login (Q1.2 Fase C) |
-| `searchTenantsCF` | Callable | Busca locatários por email ou CPF — restrito ao locador (Q1.6) |
-
-### Push Notifications via Cloud Function
-- Trigger `sendPushNotification`: dispara ao criar qualquer documento em `notifications/{notifId}`
-- Busca `fcmToken` do `userId` destinatário e envia via `admin.messaging().send()`
-- Se token inválido (`registration-token-not-registered`), limpa `fcmToken` do usuário no Firestore
-- As notificações agora chegam como **push real** (não apenas salvas no Firestore)
-
-### Rate Limiting (Q1.10)
-- Todas as CFs callable têm rate limiting via `functions/src/utils/rateLimiter.js`
-- Usa transação Firestore em `rateLimits/{uid}_{action}` — janela fixa de 60s
-- Campo `ttlAt` nos documentos para configurar TTL policy no console (evita acúmulo)
-- `HttpsError('resource-exhausted')` quando excedido (HTTP 429)
-
-| CF | Limite por minuto |
-|----|-------------------|
-| `createCharge`, `getPixQrCode` | 30 |
-| `cancelCharge`, `editCharge` | 20 |
-| `createContractCF`, `cancelContract`, `editContract`, `assignTenantCF` | 10 |
-| `deleteCarCF` | 5 |
-
----
-
-## NAVEGAÇÃO
-
-### Bottom Tabs
-| Tab | Tela | Visível para |
-|-----|------|-------------|
-| 🚗 Carros | HomeScreen | Ambos |
-| 📋 Tarefas | TasksScreen | Ambos |
-| 💳 Pagamentos | TenantPaymentsScreen | Só locatário |
-| 📢 Mural | MuralManagerScreen | Só locador |
-| 💰 Financeiro | FinancialDashboardScreen | Só locador |
-| 👤 Perfil | ProfileScreen | Ambos |
-
-**Nota**: `AddCarScreen` foi removido das tabs — está acessível via card na HomeScreen (locador) como stack screen.
-
-### Stack Screens (dentro do app autenticado)
-- CarDetailsScreen (detalhes + ações do carro)
-- EditCarScreen (editar dados do carro)
-- AddCarScreen (adicionar novo carro)
-- AssignTenantScreen (buscar + enviar solicitação)
-- TaskDetailsScreen (ver + completar + aprovar tarefa)
-- TenantDetailsScreen (dados completos do locatário)
-- ContractDetailsScreen (detalhes + edição de contrato)
-- PaymentContractScreen (criar novo contrato de aluguel)
-- ChargesScreen (criar cobrança avulsa)
-- PaymentDetailsScreen (detalhes de uma cobrança, QR PIX)
-
----
-
-## COMPONENTES REUTILIZÁVEIS
-
-### `ImageViewer`
-Modal fullscreen com zoom (pinch-to-zoom), compartilhamento e download.
-```tsx
-<ImageViewer visible={bool} imageUrl={string} title={string} onClose={() => void} />
-```
-
-### `PhotoPicker`
-Componente que abre câmera ou galeria, faz upload para Cloudinary, retorna URL.
-```tsx
-<PhotoPicker label={string} onPhotoSelected={(url: string) => void} currentPhotoUrl={string|null} />
-```
-
-### `PdfViewer`
-Visualizador de PDF inline usando `react-native-pdf`.
-
-### `DocumentPicker`
-Seleção de documentos PDF para upload.
+**Ao adicionar telas, modificar navegação ou usar componentes compartilhados → leia `docs/NAVIGATION_COMPONENTS.md`.**
 
 ---
 
 ## PADRÕES DE CÓDIGO
 
 ### Services
-- Todos os services retornam `{ success: boolean, data?: any, error?: string }`
-- Usam `firestore()` (importado de `../config/firebase`)
-- Mutations usam `firestore.FieldValue.serverTimestamp()` para timestamps
-- Erros são capturados com try/catch e logados com `console.error`
+- Retornam `{ success: boolean, data?: any, error?: string }` — **exceto `paymentService`**
+- `paymentService` usa `fn().httpsCallable(...)` e retorna `result.data` diretamente; erros retornam `{ success: false, error: error.message }`
+- Usar `firestore()` de `../config/firebase`; timestamps com `firestore.FieldValue.serverTimestamp()`
 
 ### Screens
-- Arquivos .tsx com StyleSheet inline no final
-- Cor primária: `#4F46E5` (indigo)
-- Cor de sucesso: `#059669` / `#D1FAE5`
-- Cor de erro: `#DC2626` / `#FEE2E2`
-- Cor de warning: `#F59E0B` / `#FEF3C7`
-- Background: `#F3F4F6`
-- Cards: `#fff` com borderRadius 12 e elevation 2
+- Arquivos `.tsx`, StyleSheet inline no final do arquivo
+- Texto no código **sem acentos** (ex: "Atualizacao") para evitar problemas de encoding
+- **Não usar `Alert.prompt`** — só existe no iOS; usar `Alert.alert`
+
+### Paleta de cores
+- Primária: `#4F46E5` | Sucesso: `#059669` / bg `#D1FAE5` | Erro: `#DC2626` / bg `#FEE2E2`
+- Warning: `#F59E0B` / bg `#FEF3C7` | Background: `#F3F4F6` | Cards: `#fff` borderRadius 12
+
+**Ao trabalhar em UI/estilização → leia `docs/VISUAL.md`.**
 
 ### Validação
-Todas as validações client-side ficam em `src/utils/validation.js`:
-- `validateCpf(cpf)` — valida dígitos verificadores
-- `validateEmail(email)` — regex
-- `validateDate(dateStr)` — formato DD/MM/AAAA
-- `validatePhone(phone)` — formato brasileiro 10-11 dígitos
-- `validatePassword(password)` — retorna `{ valid, errors[] }`
-- `sanitizeText(text)` — remove caracteres perigosos
-- `sanitizeNumeric(text)` — extrai só números
-- `fetchAddressByCep(cep)` — busca ViaCEP, retorna `{ success, data: { street, neighborhood, city, state, complement } }` ou `{ success: false, error }`
-- `formatCep(text)` — formata "00000-000"
+Funções client-side em `src/utils/validation.js`: `validateCpf`, `validateEmail`, `validateDate`, `validatePhone`, `validatePassword`, `sanitizeText`, `sanitizeNumeric`, `fetchAddressByCep`, `formatCep`
 
-### Queries Firestore — Índices
-- Usar composite indexes livremente quando a query precisar — são gratuitos e melhoram performance
-- Ao criar um novo índice: documentar na tabela em "FIRESTORE — QUERIES E ÍNDICES" e atualizar `firestore.indexes.json`
-- Deploy de índices: `firebase deploy --only firestore:indexes`
-- Ordenação com `orderBy` no Firestore é preferível a `.sort()` client-side quando possível (mais eficiente, menos dados transferidos)
-
----
-
-## CLOUDINARY
-
-- **Cloud name**: `dzjqdjdcz`
-- Upload feito pelo `PhotoPicker` usando unsigned upload preset
-- Fotos são armazenadas como URLs completas Cloudinary nos documentos Firestore
-- O `cloudinary.js` exporta helpers para gerar URLs de preview/full de PDFs
-
----
-
-## NOTIFICAÇÕES
-
-- Usa Firebase Cloud Messaging (FCM)
-- Token FCM salvo no documento do usuário (`fcmToken`)
-- `notificationService.createNotification()` cria um documento em `notifications/`
-- As notificações são criadas em momentos como:
-  - Tarefa automática gerada
-  - Tarefa manual criada pelo locador
-  - Solicitação de vínculo enviada
-  - Solicitação aceita/recusada
-  - Tarefa aprovada/devolvida para revisão
-- Push notifications reais são enviadas pela Cloud Function `sendPushNotification` (trigger Firestore) — implementada e em produção
-
----
-
-## FERRAMENTAS DE DESENVOLVIMENTO — GEMINI MCP
-
-### Invocação do Gemini
-Usar o MCP tool `mcp__gemini-cli__ask-gemini` (testado e funcional em 31/03/2026):
-
-```
-mcp__gemini-cli__ask-gemini
-  prompt: "..."
-  model: "gemini-3.1-pro-preview"   ← padrão para todas as chamadas
-  changeMode: false                  ← Gemini só gera relatorio, nao aplica patches
-```
-
-**Modelos disponíveis:**
-| Modelo | ID | Quando usar |
-|---|---|---|
-| Gemini 3.1 Pro | `gemini-3.1-pro-preview` | **Padrao** — auditorias, analises complexas |
-| Gemini 2.5 Flash | `gemini-2.5-flash` | Somente se usuario pedir velocidade |
-
-> `gemini-3-pro-preview` foi descontinuado em 26/03/2026.
-> `mcp__gemini-cli__ping` falha com `spawn echo ENOENT` — irrelevante, ignorar.
-
-### Workspace do Gemini — CRITICO
-- **Nunca usar sintaxe `@arquivo`** no prompt — faz o Gemini detectar o `package.json` de `functions/` e restringir o workspace, bloqueando escrita fora dessa pasta
-- Passar o conteúdo dos arquivos **colado diretamente no texto** do prompt
-
-### Divisão de responsabilidades
-- **Claude faz direto**: edicoes cirurgicas, correcoes de bugs, mudancas em 1-3 arquivos existentes
-- **Gemini**: criacao de arquivos novos grandes e auditorias / "segunda opiniao"
-
----
-
-## MELHORIAS PENDENTES
-
-- [ ] Splash screen customizada
-- [ ] Suporte iOS (pipeline em andamento — ver PLANO-IOS.md)
+### Índices Firestore
+- Ao criar índice: documentar em `docs/FIRESTORE_INDEXES.md` e atualizar `firestore.indexes.json`
 
 ---
 
 ## OBSERVAÇÕES IMPORTANTES PARA DESENVOLVIMENTO
 
-1. **Firebase config**: O arquivo `src/config/firebase.js` exporta `{ auth, firestore, messaging }` usando `@react-native-firebase`. Não usar `firebase/app` do SDK web.
+1. **Firebase config**: `src/config/firebase.js` exporta `{ auth, firestore, messaging }` via `@react-native-firebase`. Não usar `firebase/app` do SDK web.
 
-2. **Google Sign-In**: Configurado em `App.tsx` com `authService.configureGoogleSignIn(GOOGLE_WEB_CLIENT_ID)`. O Web Client ID vem do Firebase Console → Authentication → Sign-in method → Google.
+2. **Google Sign-In**: Configurado em `App.tsx` com `authService.configureGoogleSignIn(GOOGLE_WEB_CLIENT_ID)`. Web Client ID vem do Firebase Console → Auth → Sign-in method → Google.
 
-3. **CEP Autocomplete**: Usa `fetchAddressByCep` de `validation.js`. Retorna `{ success: true, data: { street, neighborhood, city, state } }`. O handler de CEP é idêntico em RegisterScreen e GoogleCompleteProfileScreen — deve permanecer assim para consistência.
+3. **CEP Autocomplete**: Usar `fetchAddressByCep` de `validation.js`. Handler de CEP é idêntico em RegisterScreen e GoogleCompleteProfileScreen — manter assim para consistência.
 
-4. **Locatário só pode ter 1 carro**: Verificado por `carsService.checkTenantHasCar()` antes de atribuir.
+4. **Locatário só pode ter 1 carro**: Verificado por `carsService.checkTenantHasCar()` antes de atribuir. (fluxo completo em `docs/FLOWS.md`)
 
-5. **Tarefas não são deletadas ao remover locatário**: As tarefas pendentes permanecem no Firestore. Isso pode ser melhorado no futuro.
+5. **Tarefas não são deletadas ao remover locatário**: As tarefas pendentes permanecem no Firestore. (detalhes em `docs/FLOWS.md`)
 
-6. **Documentos do carro**: São PDFs uploadados ao Cloudinary. Tipos: `crlve`, `ipva`, `licenciamento`, `seguro`, `crv`. Cada um armazenado como `{ url, name, uploadedAt }` dentro de `car.documents`.
+6. **Documentos do carro**: PDFs no Cloudinary. Tipos: `crlve`, `ipva`, `licenciamento`, `seguro`, `crv`. Cada um como `{ url, name, uploadedAt }` em `car.documents`. (schema completo em `docs/FIRESTORE_SCHEMA.md`)
 
-7. **9 ângulos de foto obrigatórios** (inspeção fotográfica): frente, traseira, lado_esquerdo, lado_direito, painel, banco_dianteiro, banco_traseiro, porta_malas, motor.
+7. **9 ângulos de foto obrigatórios** (inspeção fotográfica): frente, traseira, lado_esquerdo, lado_direito, painel, banco_dianteiro, banco_traseiro, porta_malas, motor. (fluxo de conclusão de tarefa em `docs/FLOWS.md`)
 
-8. **Formatação de dados**: CPF armazenado sem máscara (11 dígitos), CNPJ sem máscara (14 dígitos), telefone sem máscara (10-11 dígitos), CEP sem máscara (8 dígitos). Formatação é feita na UI.
+8. **Formatação de dados**: CPF sem máscara (11 dígitos), CNPJ (14), telefone (10-11), CEP (8). Formatação só na UI.
 
-9. **Todas as telas usam texto sem acentos** no código (ex: "Atualizacao" em vez de "Atualização") para evitar problemas de encoding.
+9. **Texto sem acentos no código**: "Atualizacao" em vez de "Atualização" — evita problemas de encoding.
 
-10. **Não usar `Alert.prompt`** em Android — só existe no iOS. O TaskDetailsScreen usa fallback com `Alert.alert` para solicitar motivo de revisão.
+10. **Não usar `Alert.prompt`** em Android — só existe no iOS. Usar `Alert.alert` como fallback.
 
-11. **date-fns**: Usamos apenas `differenceInDays` no `tasksService.js`. Não importar outras funções sem necessidade.
+11. **date-fns**: Usar apenas `differenceInDays` de `tasksService.js`. Não importar outras funções.
 
-12. **Estilo consistente**: Todas as telas seguem o padrão visual com `#4F46E5` como cor primária, `#F3F4F6` como background, cards brancos com borderRadius 12. Manter essa consistência em novas telas.
+12. **Estilo consistente**: Cor primária `#4F46E5`, background `#F3F4F6`, cards brancos borderRadius 12. Manter em novas telas.
 
-13. **Cloud Functions — deploy e IAM**: Após qualquer `firebase deploy --only functions`, aplicar IAM policy manualmente via script (ver MEMORY.md) para liberar invocação pública. A org policy do GCP bloqueia o `invoker: 'public'` automático do gen 2.
+13. **Cloud Functions — deploy e IAM**: Após `firebase deploy --only functions`, rodar `functions/src/scripts/apply-iam.js` para liberar invocação pública. A org policy do GCP bloqueia `invoker: 'public'` automático do gen 2.
 
-14. **paymentService — padrão de retorno**: Diferente dos outros services, `paymentService` usa `fn().httpsCallable(...)` e retorna o `result.data` diretamente da Cloud Function. Em caso de erro, retorna `{ success: false, error: error.message }`.
+14. **paymentService — padrão diferente**: Usa `httpsCallable`, retorna `result.data`. Erros: `{ success: false, error: error.message }`.
 
-15. **asaasAccounts**: Nunca tentar ler/escrever essa coleção direto do app — o Firebase Security Rules bloqueia acesso do cliente. Toda interação é via Cloud Functions (admin SDK bypassa as rules).
+15. **asaasAccounts**: Nunca ler/escrever do app — Firebase Security Rules bloqueia. Apenas Cloud Functions via admin SDK.
 
-16. **Contrato único por carro**: Cada carro pode ter no máximo 1 contrato ativo (`active: true`). A criação usa transação Firestore para prevenir race condition.
+16. **Contrato único por carro**: Max 1 contrato ativo. Criação usa transação Firestore (previne race condition). (detalhes de contratos em `docs/PAYMENTS.md`)
 
-17. **PermissionsScreen**: Tela adicionada no fluxo de onboarding, exibida após verificação de email (primeira vez). Solicita permissões de notificação antes de entrar no app.
+17. **PermissionsScreen**: Exibida após verificação de email (primeira vez). Solicita permissões de notificação.
 
-18. **PII em subcollection private** (Q1.2 Fase C): CPF, CNPJ e phone foram removidos do doc público `users/{uid}` e ficam apenas em `users/{uid}/private/data`. Checks de unicidade e login por CPF usam CFs `checkPiiUniqueCF` e `findEmailByIdentifierCF` (admin SDK). Queries da subcollection `private` precisam de fieldOverrides com queryScope COLLECTION_GROUP no firestore.indexes.json.
+18. **PII em subcollection private** (Q1.2 Fase C): CPF, CNPJ, phone ficam em `users/{uid}/private/data`. Login por CPF usa `findEmailByIdentifierCF`. Queries precisam de fieldOverrides com `queryScope: COLLECTION_GROUP`.
 
-19. **Secrets via defineSecret** (Q6.2): 5 secrets gerenciados via Firebase Secret Manager — ASAAS_API_KEY, ASAAS_PLATFORM_WALLET_ID, ASAAS_WEBHOOK_TOKEN, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET. Antes de novo deploy, configurar via `firebase functions:secrets:set <NAME>`. Configs nao-sensiveis (ASAAS_BASE_URL, ASAAS_PLATFORM_FEE_PERCENT, ASAAS_WEBHOOK_URL, CLOUDINARY_CLOUD_NAME) permanecem no .env.
+19. **Secrets via defineSecret**: `ASAAS_API_KEY`, `ASAAS_PLATFORM_WALLET_ID`, `ASAAS_WEBHOOK_TOKEN`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` — gerenciados via Firebase Secret Manager. Configurar com `firebase functions:secrets:set <NAME>` antes de novo deploy.
+
+---
+
+## FERRAMENTAS DE DESENVOLVIMENTO — GEMINI MCP
+
+### Invocação
+```
+mcp__gemini-cli__ask-gemini
+  prompt: "..."
+  model: "gemini-3.1-pro-preview"   ← padrão para todas as chamadas
+  changeMode: false                  ← Gemini só gera relatório, não aplica patches
+```
+
+| Modelo | ID | Quando usar |
+|---|---|---|
+| Gemini 3.1 Pro | `gemini-3.1-pro-preview` | **Padrão** — auditorias, análises complexas |
+| Gemini 2.5 Flash | `gemini-2.5-flash` | Só se usuário pedir velocidade |
+
+> `gemini-3-pro-preview` descontinuado em 26/03/2026. `mcp__gemini-cli__ping` falha com `spawn echo ENOENT` — ignorar.
+
+### Workspace do Gemini — CRÍTICO
+- **Nunca usar sintaxe `@arquivo`** no prompt — restringe o workspace ao `functions/`
+- Passar conteúdo de arquivos **colado diretamente no texto** do prompt
+
+### Divisão de responsabilidades
+- **Claude faz direto**: edições cirúrgicas, bugs, mudanças em 1-3 arquivos
+- **Gemini**: criação de arquivos novos grandes e auditorias / "segunda opinião"
