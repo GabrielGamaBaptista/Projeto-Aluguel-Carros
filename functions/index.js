@@ -77,3 +77,7 @@ exports.createNotificationCF = createNotification.createNotificationCF;
 // Mural — criacao via CF com validacao server-side de relacionamento (SEC-03/SEC-08)
 const muralHandler = require('./src/handlers/muralHandler');
 exports.createMuralPostCF = muralHandler.createMuralPostCF;
+
+// Email de verificacao via Resend (dominio proprio @bapcar.tech)
+const emailHandler = require('./src/handlers/email');
+exports.sendVerificationEmailCF = emailHandler.sendVerificationEmailCF;

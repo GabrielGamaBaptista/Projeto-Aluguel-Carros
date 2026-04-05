@@ -73,7 +73,7 @@ export const authService = {
 
       const userCredential = await auth().createUserWithEmailAndPassword(cleanEmail, password);
       const user = userCredential.user;
-      try { await user.sendEmailVerification(); } catch (e) { console.error('Verify email error:', e); }
+      try { await fn().httpsCallable('sendVerificationEmailCF')(); } catch (e) { console.error('Verify email error:', e); }
 
       // Doc publico: apenas dados de acesso e autenticacao (sem PII).
       // Q1.2 Fase C: cpf, cnpj e phone removidos — ficam somente em private/data.
@@ -234,10 +234,10 @@ export const authService = {
       const user = auth().currentUser;
       if (!user) return { success: false, error: 'Usuario nao logado.' };
       if (user.emailVerified) return { success: true, alreadyVerified: true };
-      await user.sendEmailVerification();
-      return { success: true };
+      const result = await fn().httpsCallable('sendVerificationEmailCF')();
+      return result.data;
     } catch (error) {
-      if (error.code === 'auth/too-many-requests') return { success: false, error: 'Muitos emails enviados. Aguarde.' };
+      if (error.code === 'functions/resource-exhausted') return { success: false, error: 'Muitos emails enviados. Aguarde.' };
       return { success: false, error: 'Erro ao enviar email.' };
     }
   },

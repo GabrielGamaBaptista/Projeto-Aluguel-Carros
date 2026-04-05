@@ -43,6 +43,8 @@ const SERVICES = [
   'findemailbyidentifiercf',
   // Adicionados no batch 5 (Q1.6):
   'searchtenantscf',
+  // Email de verificacao via Resend:
+  'sendverificationemailcf',
 ];
 
 function getAccessToken() {

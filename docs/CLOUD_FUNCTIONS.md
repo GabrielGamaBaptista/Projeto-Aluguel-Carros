@@ -38,6 +38,7 @@
 | `searchTenantsCF` | Callable | Busca locatários por email ou CPF — restrito ao locador (Q1.6) |
 | `createNotificationCF` | Callable | Cria notificação com validação server-side |
 | `createMuralPostCF` | Callable | Cria post no mural com validação server-side |
+| `sendVerificationEmailCF` | Callable | Envia email de verificação via Resend (`@bapcar.tech`) |
 | `generateRecurringCharges` | Scheduled (cron diário 08h SP) | Gera cobranças recorrentes |
 | `notifyOverdueTasks` | Scheduled (cron diário) | Notifica tarefas vencidas |
 | `asaasWebhook` | onRequest (HTTPS) | Recebe eventos de pagamento do Asaas |
@@ -66,6 +67,7 @@
 | `createCharge`, `getPixQrCode`, `createNotificationCF`, `createMuralPostCF`, `getTenantDetailsCF` | 30 |
 | `cancelCharge`, `editCharge`, `searchTenantsCF` | 20 |
 | `createContractCF`, `cancelContract`, `editContract`, `pauseContract`, `assignTenantCF`, `checkPiiUniqueCF`*, `findEmailByIdentifierCF`* | 10 |
+| `sendVerificationEmailCF` | 5 |
 | `deleteCarCF` | 5 |
 | `deleteAccountCF` | 2 |
 
@@ -92,3 +94,4 @@
 | `tenantSearch.js` | `searchTenantsCF` |
 | `createNotification.js` | `createNotificationCF` |
 | `muralHandler.js` | `createMuralPostCF` |
+| `email.js` | `sendVerificationEmailCF` |
