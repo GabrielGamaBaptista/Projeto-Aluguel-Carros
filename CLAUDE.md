@@ -225,9 +225,9 @@ mcp__gemini-cli__ask-gemini
 
 > `gemini-3-pro-preview` descontinuado em 26/03/2026. `mcp__gemini-cli__ping` falha com `spawn echo ENOENT` — ignorar.
 
-### Workspace do Gemini — CRÍTICO
-- **Nunca usar sintaxe `@arquivo`** no prompt — restringe o workspace ao `functions/`
-- Passar conteúdo de arquivos **colado diretamente no texto** do prompt
+### Incluir arquivos no prompt
+- Usar `@caminho/arquivo.js` no prompt para incluir arquivos diretamente (suportado pelo MCP)
+- Alternativa: colar o conteúdo como texto no prompt
 
 ### Divisão de responsabilidades
 - **Claude faz direto**: edições cirúrgicas, bugs, mudanças em 1-3 arquivos
