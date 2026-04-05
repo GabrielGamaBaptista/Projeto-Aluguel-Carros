@@ -15,6 +15,7 @@
     "@react-native-documents/picker": "^12.0.1",
     "@react-native-firebase/app": "^21.8.0",
     "@react-native-firebase/auth": "^21.8.0",
+    "@react-native-firebase/crashlytics": "^21.14.0",
     "@react-native-firebase/firestore": "^21.8.0",
     "@react-native-firebase/functions": "^21.14.0",
     "@react-native-firebase/messaging": "^21.14.0",
